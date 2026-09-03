@@ -1,4 +1,56 @@
 use etherparse::{PacketBuilder, SlicedPacket, TransportSlice};
+use domain::base::message::Message;
+use domain::base::name::ToLabelIter;
+
+/// Parses a DNS query payload and derives all keys the proxy needs.
+///
+/// Returns `(cache_key, trie_key, qtype_int)`:
+/// - `cache_key`: lowercased forward wire-format qname, then QTYPE and QCLASS
+///   appended (same layout as the old code in `run_proxy` built manually).
+/// - `trie_key`: lowercased, label-reversed qname with no root byte — byte-
+///   identical to the output of the old `to_trie_key`.
+/// - `qtype_int`: the big-endian u16 QTYPE (e.g. 1 = A).
+///
+/// Returns `None` for malformed packets. Unlike the old `extract_dns_name`,
+/// compressed question names are handled correctly instead of being rejected.
+pub fn parse_query(payload: &[u8]) -> Option<(Vec<u8>, Vec<u8>, u16)> {
+    let msg = Message::from_slice(payload).ok()?;
+    let question = msg.sole_question().ok()?;
+    let qname = question.qname();
+
+    // Rebuild the forward wire-format name from labels (this resolves
+    // compression pointers). Lowercasing the whole buffer is safe: label
+    // length bytes are 1..=63 and `to_ascii_lowercase` only affects A-Z.
+    let mut wire = Vec::with_capacity(64);
+    for label in qname.iter_labels() {
+        if label.is_root() {
+            break;
+        }
+        wire.push(label.len() as u8);
+        wire.extend_from_slice(label.as_slice());
+    }
+    wire.push(0);
+    wire.make_ascii_lowercase();
+
+    // Trie key: same labels, reversed order, no root byte.
+    let mut labels: Vec<&[u8]> = Vec::new();
+    let mut idx = 0;
+    while idx < wire.len() && wire[idx] != 0 {
+        let len = wire[idx] as usize;
+        labels.push(&wire[idx..idx + 1 + len]);
+        idx += 1 + len;
+    }
+    labels.reverse();
+    let mut trie_key = Vec::with_capacity(wire.len() - 1);
+    for label in labels {
+        trie_key.extend_from_slice(label);
+    }
+
+    let mut cache_key = wire;
+    cache_key.extend_from_slice(&question.qtype().to_int().to_be_bytes());
+    cache_key.extend_from_slice(&question.qclass().to_int().to_be_bytes());
+    Some((cache_key, trie_key, question.qtype().to_int()))
+}
 
 // Quick zero-copy DNS name extractor
 pub fn extract_dns_name(payload: &[u8]) -> Option<&[u8]> {
@@ -352,4 +404,38 @@ pub fn create_icmp_unreachable(sliced: &SlicedPacket, raw_packet: &[u8]) -> Opti
         _ => return None,
     }
     Some(buf)
+}
+
+#[cfg(test)]
+mod wire_tests {
+    use super::*;
+    use crate::wire_test_util::{make_query, trie_key_for};
+
+    #[test]
+    fn parse_query_builds_unchanged_keys() {
+        let q = make_query("ads.Example.COM");
+        let (cache_key, trie_key, qtype) = parse_query(&q).unwrap();
+        // cache key: lowercased forward wire format + A (1) IN (1)
+        assert_eq!(
+            &cache_key[..],
+            b"\x03ads\x07example\x03com\x00\x00\x01\x00\x01"
+        );
+        // trie key: reversed labels, no root — identical to old to_trie_key output
+        assert_eq!(&trie_key[..], trie_key_for("ads.example.com"));
+        assert_eq!(qtype, 1); // A
+    }
+
+    #[test]
+    fn parse_query_handles_single_label_and_case() {
+        let q = make_query("Example.com");
+        let (cache_key, trie_key, _) = parse_query(&q).unwrap();
+        assert_eq!(&cache_key[..13], b"\x07example\x03com\x00");
+        assert_eq!(&trie_key[..], trie_key_for("example.com"));
+    }
+
+    #[test]
+    fn parse_query_rejects_garbage() {
+        assert!(parse_query(&[0u8; 3]).is_none());
+        assert!(parse_query(&[]).is_none());
+    }
 }

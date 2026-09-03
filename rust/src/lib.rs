@@ -1,6 +1,9 @@
 uniffi::setup_scaffolding!();
 
 mod proxy;
+
+#[cfg(test)]
+mod wire_test_util;
 mod quic;
 
 use proxy::{extract_dns_name, to_lowercase_wire_format, to_trie_key, create_null_response, create_forwarded_response, create_tcp_rst, create_servfail_response};
