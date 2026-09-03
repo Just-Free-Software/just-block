@@ -20,8 +20,8 @@ simple and correct.
 
 ### 1. Dependency
 
-Add `domain = "0.11"` to `rust/Cargo.toml` with the minimal feature set needed for
-`Message`, `MessageBuilder`, and `Name`. No other new dependencies. `radix_trie` and
+Add `domain = "0.12"` to `rust/Cargo.toml` with the default feature set (provides
+`Message`, `MessageBuilder`, and `Name`; nothing beyond defaults is needed). No other new dependencies. `radix_trie` and
 `etherparse` remain.
 
 ### 2. Query parsing (replaces `extract_dns_name`)
