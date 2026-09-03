@@ -347,7 +347,7 @@ mod wire_tests {
 
     #[test]
     fn min_ttl_takes_minimum_over_answers() {
-        use domain::base::iana::{Class, Rtype};
+        use domain::base::iana::Class;
         use domain::base::message_builder::MessageBuilder;
         use domain::base::name::Name;
         use domain::base::Ttl;
