@@ -1,6 +1,12 @@
 use etherparse::{PacketBuilder, SlicedPacket, TransportSlice};
 use domain::base::message::Message;
 use domain::base::name::ToLabelIter;
+use domain::base::iana::{Class, Rcode};
+use domain::base::message_builder::MessageBuilder;
+use domain::base::name::Name;
+use domain::base::{Serial, Ttl};
+use domain::dep::octseq::octets::Octets;
+use domain::rdata::Soa;
 
 /// Parses a DNS query payload and derives all keys the proxy needs.
 ///
@@ -406,6 +412,44 @@ pub fn create_icmp_unreachable(sliced: &SlicedPacket, raw_packet: &[u8]) -> Opti
     Some(buf)
 }
 
+/// Builds the DNS payload for a blocked query: NXDOMAIN, authoritative,
+/// with a root SOA in the authority section (TTL 1). Matches the shape of
+/// the old handrolled `create_null_response` (ANCOUNT=0, NSCOUNT=1).
+pub fn build_null_response<Octs: Octets + ?Sized>(
+    query: &Message<Octs>,
+) -> Option<Vec<u8>> {
+    let mut answer = MessageBuilder::new_vec()
+        .start_answer(query, Rcode::NXDOMAIN)
+        .ok()?;
+    answer.header_mut().set_aa(true);
+    let root = Name::root_ref();
+    let soa = Soa::new(
+        root.clone(),
+        root.clone(),
+        Serial(0),
+        Ttl::from_secs(0),
+        Ttl::from_secs(0),
+        Ttl::from_secs(0),
+        Ttl::from_secs(1),
+    );
+    let mut authority = answer.authority();
+    authority
+        .push((root, Class::IN, Ttl::from_secs(1), soa))
+        .ok()?;
+    Some(authority.finish())
+}
+
+/// Builds the DNS payload for an unforwardable query: SERVFAIL, empty
+/// sections, echoing the question and transaction ID.
+pub fn build_servfail_response<Octs: Octets + ?Sized>(
+    query: &Message<Octs>,
+) -> Option<Vec<u8>> {
+    let builder = MessageBuilder::new_vec()
+        .start_answer(query, Rcode::SERVFAIL)
+        .ok()?;
+    Some(builder.finish())
+}
+
 #[cfg(test)]
 mod wire_tests {
     use super::*;
@@ -437,5 +481,40 @@ mod wire_tests {
     fn parse_query_rejects_garbage() {
         assert!(parse_query(&[0u8; 3]).is_none());
         assert!(parse_query(&[]).is_none());
+    }
+
+    use crate::wire_test_util::build_query_message;
+    use domain::base::iana::Rcode;
+
+    #[test]
+    fn null_response_matches_legacy_shape() {
+        let q = make_query("ads.example.com");
+        let msg = domain::base::message::Message::from_slice(&q).unwrap();
+        let resp = build_null_response(&msg).unwrap();
+        let parsed = domain::base::message::Message::from_slice(&resp).unwrap();
+        assert_eq!(parsed.header().rcode(), Rcode::NXDOMAIN);
+        assert!(parsed.header().aa());
+        assert_eq!(parsed.header_counts().ancount(), 0);
+        assert_eq!(parsed.header_counts().nscount(), 1);
+        // Answer section is empty; SOA sits in the authority section
+        assert!(parsed.answer().unwrap().next().is_none());
+        let auth: Vec<_> = parsed.authority().unwrap().collect();
+        assert_eq!(auth.len(), 1);
+        let rec = auth[0].as_ref().unwrap();
+        assert_eq!(rec.ttl(), domain::base::Ttl::from_secs(1));
+    }
+
+    #[test]
+    fn servfail_response_has_empty_sections() {
+        let q = make_query("ads.example.com");
+        let msg = domain::base::message::Message::from_slice(&q).unwrap();
+        let resp = build_servfail_response(&msg).unwrap();
+        let parsed = domain::base::message::Message::from_slice(&resp).unwrap();
+        assert_eq!(parsed.header().rcode(), Rcode::SERVFAIL);
+        assert_eq!(parsed.header_counts().ancount(), 0);
+        assert_eq!(parsed.header_counts().nscount(), 0);
+        assert_eq!(parsed.header_counts().qdcount(), 1);
+        // Transaction ID echoes the query
+        assert_eq!(parsed.header().id(), msg.header().id());
     }
 }

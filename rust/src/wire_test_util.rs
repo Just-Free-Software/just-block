@@ -13,6 +13,14 @@ pub fn make_query(domain: &str) -> Vec<u8> {
 }
 
 #[cfg(test)]
+pub fn build_query_message(domain: &str) -> std::borrow::Cow<'static, [u8]> {
+    // Leak a small test buffer so the returned Message<&[u8]> is 'static.
+    let q: &'static [u8] = Box::leak(make_query(domain).into_boxed_slice());
+    let _ = domain::base::message::Message::from_slice(q).unwrap();
+    std::borrow::Cow::Borrowed(q)
+}
+
+#[cfg(test)]
 pub fn trie_key_for(domain: &str) -> Vec<u8> {
     // Same output format as the old handrolled to_trie_key/domain_to_wire_format:
     // length-prefixed labels, TLD first, no root byte.
