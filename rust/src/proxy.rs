@@ -8,6 +8,22 @@ use domain::base::{Serial, Ttl};
 use domain::dep::octseq::octets::Octets;
 use domain::rdata::Soa;
 
+/// Returns the minimum TTL over all answer records of a DNS response.
+/// `None` if the payload is not a parseable message or has no answers —
+/// callers treat that as "do not cache".
+pub fn min_ttl(payload: &[u8]) -> Option<u32> {
+    let msg = Message::from_slice(payload).ok()?;
+    let mut min: Option<u32> = None;
+    for rec in msg.answer().ok()?.flatten() {
+        let t = rec.ttl().as_secs();
+        min = Some(match min {
+            Some(m) => m.min(t),
+            None => t,
+        });
+    }
+    min
+}
+
 /// Parses a DNS query payload and derives all keys the proxy needs.
 ///
 /// Returns `(cache_key, trie_key, qtype_int)`:
@@ -516,5 +532,37 @@ mod wire_tests {
         assert_eq!(parsed.header_counts().qdcount(), 1);
         // Transaction ID echoes the query
         assert_eq!(parsed.header().id(), msg.header().id());
+    }
+
+    #[test]
+    fn min_ttl_takes_minimum_over_answers() {
+        use domain::base::iana::{Class, Rtype};
+        use domain::base::message_builder::MessageBuilder;
+        use domain::base::name::Name;
+        use domain::base::Ttl;
+        use domain::rdata::A;
+        use std::net::Ipv4Addr;
+
+        let qbuf = build_query_message("ads.example.com");
+        let msg = domain::base::message::Message::from_slice(&qbuf).unwrap();
+        let mut rb = MessageBuilder::new_vec()
+            .start_answer(&msg, Rcode::NOERROR)
+            .unwrap();
+        let name = Name::vec_from_str("ads.example.com").unwrap();
+        rb.push((name.clone(), Class::IN, Ttl::from_secs(300), A::new(Ipv4Addr::new(1, 2, 3, 4))))
+            .unwrap();
+        rb.push((name, Class::IN, Ttl::from_secs(60), A::new(Ipv4Addr::new(5, 6, 7, 8))))
+            .unwrap();
+        let resp = rb.finish();
+        assert_eq!(min_ttl(&resp), Some(60));
+    }
+
+    #[test]
+    fn min_ttl_none_for_garbage_or_empty_answers() {
+        assert_eq!(min_ttl(&[0u8; 3]), None);
+        let qbuf = build_query_message("ads.example.com");
+        let msg = domain::base::message::Message::from_slice(&qbuf).unwrap();
+        // A query itself has no answer section records
+        assert_eq!(min_ttl(msg.as_slice()), None);
     }
 }
