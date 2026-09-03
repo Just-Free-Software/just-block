@@ -13,11 +13,11 @@ pub fn make_query(domain: &str) -> Vec<u8> {
 }
 
 #[cfg(test)]
-pub fn build_query_message(domain: &str) -> std::borrow::Cow<'static, [u8]> {
-    // Leak a small test buffer so the returned Message<&[u8]> is 'static.
+pub fn build_query_message(domain: &str) -> &'static domain::base::message::Message<[u8]> {
+    // Leak a small test buffer so the returned message is 'static.
     let q: &'static [u8] = Box::leak(make_query(domain).into_boxed_slice());
-    let _ = domain::base::message::Message::from_slice(q).unwrap();
-    std::borrow::Cow::Borrowed(q)
+    // Safe: from_slice borrows from `q`, which lives forever.
+    domain::base::message::Message::from_slice(q).unwrap()
 }
 
 #[cfg(test)]

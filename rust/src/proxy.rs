@@ -1,6 +1,6 @@
 use etherparse::{PacketBuilder, SlicedPacket, TransportSlice};
 use domain::base::message::Message;
-use domain::base::name::ToLabelIter;
+use domain::base::name::{ToLabelIter, ToName};
 use domain::base::iana::{Class, Rcode};
 use domain::base::message_builder::MessageBuilder;
 use domain::base::name::Name;
@@ -13,15 +13,7 @@ use domain::rdata::Soa;
 /// callers treat that as "do not cache".
 pub fn min_ttl(payload: &[u8]) -> Option<u32> {
     let msg = Message::from_slice(payload).ok()?;
-    let mut min: Option<u32> = None;
-    for rec in msg.answer().ok()?.flatten() {
-        let t = rec.ttl().as_secs();
-        min = Some(match min {
-            Some(m) => m.min(t),
-            None => t,
-        });
-    }
-    min
+    msg.answer().ok()?.flatten().map(|rec| rec.ttl().as_secs()).min()
 }
 
 /// Parses a DNS query payload and derives all keys the proxy needs.
@@ -54,18 +46,18 @@ pub fn parse_query(payload: &[u8]) -> Option<(Vec<u8>, Vec<u8>, u16)> {
     wire.push(0);
     wire.make_ascii_lowercase();
 
-    // Trie key: same labels, reversed order, no root byte.
-    let mut labels: Vec<&[u8]> = Vec::new();
+    // Trie key: labels in reverse order, each label's bytes (incl. length
+    // byte) kept intact, no root byte — identical to old `to_trie_key` output.
+    let mut ranges: Vec<(usize, usize)> = Vec::new();
     let mut idx = 0;
-    while idx < wire.len() && wire[idx] != 0 {
-        let len = wire[idx] as usize;
-        labels.push(&wire[idx..idx + 1 + len]);
-        idx += 1 + len;
+    while wire[idx] != 0 {
+        let len = 1 + wire[idx] as usize;
+        ranges.push((idx, idx + len));
+        idx += len;
     }
-    labels.reverse();
-    let mut trie_key = Vec::with_capacity(wire.len() - 1);
-    for label in labels {
-        trie_key.extend_from_slice(label);
+    let mut trie_key: Vec<u8> = Vec::with_capacity(wire.len() - 1);
+    for (start, end) in ranges.into_iter().rev() {
+        trie_key.extend_from_slice(&wire[start..end]);
     }
 
     let mut cache_key = wire;
@@ -434,6 +426,11 @@ pub fn create_icmp_unreachable(sliced: &SlicedPacket, raw_packet: &[u8]) -> Opti
 pub fn build_null_response<Octs: Octets + ?Sized>(
     query: &Message<Octs>,
 ) -> Option<Vec<u8>> {
+    let question = query.sole_question().ok()?;
+    // Legacy `create_null_response` used the question name as the SOA owner
+    // (a 0xC00C pointer to the question). Keep that shape.
+    let owner = question.qname().to_name::<Vec<u8>>();
+
     let mut answer = MessageBuilder::new_vec()
         .start_answer(query, Rcode::NXDOMAIN)
         .ok()?;
@@ -450,7 +447,7 @@ pub fn build_null_response<Octs: Octets + ?Sized>(
     );
     let mut authority = answer.authority();
     authority
-        .push((root, Class::IN, Ttl::from_secs(1), soa))
+        .push((owner, Class::IN, Ttl::from_secs(1), soa))
         .ok()?;
     Some(authority.finish())
 }
@@ -518,6 +515,13 @@ mod wire_tests {
         assert_eq!(auth.len(), 1);
         let rec = auth[0].as_ref().unwrap();
         assert_eq!(rec.ttl(), domain::base::Ttl::from_secs(1));
+        // SOA owner is the question name (matches legacy 0xC00C pointer)
+        let expected_owner = msg
+            .sole_question()
+            .unwrap()
+            .qname()
+            .to_name::<Vec<u8>>();
+        assert_eq!(rec.owner().to_name::<Vec<u8>>(), expected_owner);
     }
 
     #[test]
@@ -543,8 +547,7 @@ mod wire_tests {
         use domain::rdata::A;
         use std::net::Ipv4Addr;
 
-        let qbuf = build_query_message("ads.example.com");
-        let msg = domain::base::message::Message::from_slice(&qbuf).unwrap();
+        let msg = build_query_message("ads.example.com");
         let mut rb = MessageBuilder::new_vec()
             .start_answer(&msg, Rcode::NOERROR)
             .unwrap();
@@ -560,9 +563,34 @@ mod wire_tests {
     #[test]
     fn min_ttl_none_for_garbage_or_empty_answers() {
         assert_eq!(min_ttl(&[0u8; 3]), None);
-        let qbuf = build_query_message("ads.example.com");
-        let msg = domain::base::message::Message::from_slice(&qbuf).unwrap();
+        let msg = build_query_message("ads.example.com");
         // A query itself has no answer section records
         assert_eq!(min_ttl(msg.as_slice()), None);
+    }
+
+    #[test]
+    fn parse_query_handles_root_qname() {
+        use domain::base::iana::{Class, Rtype};
+        use domain::base::name::Name;
+
+        let mut qb = MessageBuilder::new_vec().question();
+        qb.push((Name::root_ref(), Rtype::A, Class::IN)).unwrap();
+        let p = qb.finish();
+        let (cache_key, trie_key, qtype) = parse_query(&p).unwrap();
+        assert!(trie_key.is_empty());
+        assert_eq!(&cache_key[..], b"\x00\x00\x01\x00\x01");
+        assert_eq!(qtype, 1);
+    }
+
+    #[test]
+    fn parse_query_rejects_multiple_questions() {
+        // Hand-craft: header with QDCOUNT=2, two uncompressed questions.
+        let mut p = vec![0x12, 0x34, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        for name in ["\x07example\x03com", "\x04test\x03org"] {
+            p.extend_from_slice(name.as_bytes());
+            p.push(0);
+            p.extend_from_slice(&[0, 1, 0, 1]); // A, IN
+        }
+        assert!(parse_query(&p).is_none());
     }
 }
