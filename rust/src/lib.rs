@@ -14,7 +14,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::Mutex as TokioMutex;
 use std::num::NonZeroUsize;
 use tokio::sync::mpsc;
-use std::time::{Instant, Duration};
+use std::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 static RUNTIME: OnceLock<Runtime> = OnceLock::new();
@@ -127,9 +127,6 @@ fn domain_to_wire_format(domain: &str) -> Vec<u8> {
     out
 }
 
-use std::fs::OpenOptions;
-use std::io::Write;
-
 fn log_trace(_msg: &str) {
     // Logging disabled to prevent synchronous I/O blocking
     // if let Ok(mut f) = OpenOptions::new().create(true).append(true).open("/data/data/dev.michaelylee.freeblocker/cache/rust.log") {
@@ -208,9 +205,7 @@ async fn run_proxy(
                     if let Some(etherparse::TransportSlice::Udp(udp)) = sliced.transport.as_ref() {
                         if udp.destination_port() == 53 {
                             let payload = udp.payload();
-                            if let Some((cache_key, trie_key, _qtype)) = parse_query(payload) {
-                                let full_cache_key = Some(cache_key);
-
+                            if let Some((cache_key, trie_key)) = parse_query(payload) {
                                 // Reversed key for blocklist trie lookups
                                 let blocked = {
                                     let lock = blocklist.read().unwrap_or_else(|e| e.into_inner());
@@ -229,27 +224,25 @@ async fn run_proxy(
                                     // Check cache
                                     let mut cache_lock = cache.lock().await;
                                     let mut use_cache = false;
-                                    if let Some(ck) = &full_cache_key {
-                                        if let Some(cached_entry) = cache_lock.get(ck) {
-                                            if Instant::now() < cached_entry.expires_at {
-                                                if let Some(resp) = create_forwarded_response(&sliced, payload, &cached_entry.payload) {
-                                                    let _ = tx.try_send(resp);
-                                                }
-                                                use_cache = true;
+                                    if let Some(cached_entry) = cache_lock.get(&cache_key) {
+                                        if Instant::now() < cached_entry.expires_at {
+                                            if let Some(resp) = create_forwarded_response(&sliced, payload, &cached_entry.payload) {
+                                                let _ = tx.try_send(resp);
                                             }
+                                            use_cache = true;
                                         }
                                     }
                                     if use_cache {
                                         continue;
                                     }
                                     drop(cache_lock);
-                                                                       // Forward via DoQ
+                                    // Forward via DoQ
                                     let doq_conn = doq_conn.clone();
                                     let doq_endpoint_v4 = doq_endpoint_v4.clone();
                                     let doq_endpoint_v6 = doq_endpoint_v6.clone();
                                     let payload_vec = payload.to_vec();
                                     let req_ip = pkt.to_vec();
-                                    let cache_key = full_cache_key;
+                                    let cache_key = cache_key.clone();
                                     let cache_clone = cache.clone();
                                     let upstream_v4_clone = upstream_v4.clone();
                                     let upstream_v6_clone = upstream_v6.clone();
@@ -368,15 +361,13 @@ async fn run_proxy(
                                                                 if let Some(resp) = create_forwarded_response(&sliced, &payload_vec, &resp_payload) {
                                                                     log_trace("Sending response to TUN channel");
                                                                     let _ = tx_clone.try_send(resp);
-                                                                    if let Some(ck) = cache_key {
-                                                                        if let Some(ttl) = min_ttl(&resp_payload) {
-                                                                            if ttl > 0 {
-                                                                                let mut lock = cache_clone.lock().await;
-                                                                                lock.put(ck, CacheEntry {
-                                                                                    payload: resp_payload,
-                                                                                    expires_at: std::time::Instant::now() + std::time::Duration::from_secs(ttl as u64),
-                                                                                });
-                                                                            }
+                                                                    if let Some(ttl) = min_ttl(&resp_payload) {
+                                                                        if ttl > 0 {
+                                                                            let mut lock = cache_clone.lock().await;
+                                                                            lock.put(cache_key, CacheEntry {
+                                                                                payload: resp_payload,
+                                                                                expires_at: std::time::Instant::now() + std::time::Duration::from_secs(ttl as u64),
+                                                                            });
                                                                         }
                                                                     }
                                                                 }

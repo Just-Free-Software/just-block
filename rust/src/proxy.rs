@@ -16,18 +16,20 @@ pub fn min_ttl(payload: &[u8]) -> Option<u32> {
     msg.answer().ok()?.flatten().map(|rec| rec.ttl().as_secs()).min()
 }
 
-/// Parses a DNS query payload and derives all keys the proxy needs.
+/// Parses a DNS query payload and derives the keys the proxy needs.
 ///
-/// Returns `(cache_key, trie_key, qtype_int)`:
-/// - `cache_key`: lowercased forward wire-format qname, then QTYPE and QCLASS
-///   appended (same layout as the old code in `run_proxy` built manually).
-/// - `trie_key`: lowercased, label-reversed qname with no root byte — byte-
-///   identical to the output of the old `to_trie_key`.
-/// - `qtype_int`: the big-endian u16 QTYPE (e.g. 1 = A).
+/// Returns `(cache_key, trie_key)`:
+/// - `cache_key`: lowercased forward wire-format qname (length-prefixed
+///   labels plus root byte), with the big-endian QTYPE and QCLASS appended —
+///   e.g. `example.com A IN` → `\x07example\x03com\x00\x00\x01\x00\x01`.
+/// - `trie_key`: lowercased, label-reversed qname (each label's length byte
+///   kept intact, no root byte) for ancestor lookups in the blocklist trie
+///   — e.g. `ads.example.com` → `\x03com\x07example\x03ads`.
 ///
-/// Returns `None` for malformed packets. Unlike the old `extract_dns_name`,
-/// compressed question names are handled correctly instead of being rejected.
-pub fn parse_query(payload: &[u8]) -> Option<(Vec<u8>, Vec<u8>, u16)> {
+/// Returns `None` for malformed packets, including packets with zero or
+/// multiple questions. Question names compressed via DNS name compression
+/// (0xC0 pointers) are resolved correctly rather than rejected.
+pub fn parse_query(payload: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
     let msg = Message::from_slice(payload).ok()?;
     let question = msg.sole_question().ok()?;
     let qname = question.qname();
@@ -47,7 +49,7 @@ pub fn parse_query(payload: &[u8]) -> Option<(Vec<u8>, Vec<u8>, u16)> {
     wire.make_ascii_lowercase();
 
     // Trie key: labels in reverse order, each label's bytes (incl. length
-    // byte) kept intact, no root byte — identical to old `to_trie_key` output.
+    // byte) kept intact, no root byte.
     let mut ranges: Vec<(usize, usize)> = Vec::new();
     let mut idx = 0;
     while wire[idx] != 0 {
@@ -63,7 +65,7 @@ pub fn parse_query(payload: &[u8]) -> Option<(Vec<u8>, Vec<u8>, u16)> {
     let mut cache_key = wire;
     cache_key.extend_from_slice(&question.qtype().to_int().to_be_bytes());
     cache_key.extend_from_slice(&question.qclass().to_int().to_be_bytes());
-    Some((cache_key, trie_key, question.qtype().to_int()))
+    Some((cache_key, trie_key))
 }
 
 
@@ -224,16 +226,17 @@ pub fn create_icmp_unreachable(sliced: &SlicedPacket, raw_packet: &[u8]) -> Opti
     Some(buf)
 }
 
-/// Builds the DNS payload for a blocked query: NXDOMAIN, authoritative,
-/// with an SOA (owner = question name, TTL 1) in the authority section.
-/// Matches the shape of the old handrolled `create_null_response`
-/// (ANCOUNT=0, NSCOUNT=1).
+/// Builds the DNS payload for a blocked query: an authoritative NXDOMAIN
+/// response echoing the question, with ANCOUNT=0 and NSCOUNT=1 — a single
+/// SOA record in the authority section, owned by the question name
+/// (equivalent to a 0xC00C pointer to the question), TTL 1, and zero
+/// MNAME/RNAME/refresh/retry/expire fields with a 1-second negative TTL.
 pub fn build_null_response<Octs: Octets + ?Sized>(
     query: &Message<Octs>,
 ) -> Option<Vec<u8>> {
     let question = query.sole_question().ok()?;
-    // Legacy `create_null_response` used the question name as the SOA owner
-    // (a 0xC00C pointer to the question). Keep that shape.
+    // The SOA owner is the question name (matching the wire-form 0xC00C
+    // pointer to the question). Keep that shape.
     let owner = question.qname().to_name::<Vec<u8>>();
 
     let mut answer = MessageBuilder::new_vec()
@@ -276,21 +279,20 @@ mod wire_tests {
     #[test]
     fn parse_query_builds_unchanged_keys() {
         let q = make_query("ads.Example.COM");
-        let (cache_key, trie_key, qtype) = parse_query(&q).unwrap();
+        let (cache_key, trie_key) = parse_query(&q).unwrap();
         // cache key: lowercased forward wire format + A (1) IN (1)
         assert_eq!(
             &cache_key[..],
             b"\x03ads\x07example\x03com\x00\x00\x01\x00\x01"
         );
-        // trie key: reversed labels, no root — identical to old to_trie_key output
+        // trie key: reversed labels, no root byte
         assert_eq!(&trie_key[..], trie_key_for("ads.example.com"));
-        assert_eq!(qtype, 1); // A
     }
 
     #[test]
     fn parse_query_handles_single_label_and_case() {
         let q = make_query("Example.com");
-        let (cache_key, trie_key, _) = parse_query(&q).unwrap();
+        let (cache_key, trie_key) = parse_query(&q).unwrap();
         assert_eq!(&cache_key[..13], b"\x07example\x03com\x00");
         assert_eq!(&trie_key[..], trie_key_for("example.com"));
     }
@@ -381,10 +383,9 @@ mod wire_tests {
         let mut qb = MessageBuilder::new_vec().question();
         qb.push((Name::root_ref(), Rtype::A, Class::IN)).unwrap();
         let p = qb.finish();
-        let (cache_key, trie_key, qtype) = parse_query(&p).unwrap();
+        let (cache_key, trie_key) = parse_query(&p).unwrap();
         assert!(trie_key.is_empty());
         assert_eq!(&cache_key[..], b"\x00\x00\x01\x00\x01");
-        assert_eq!(qtype, 1);
     }
 
     #[test]
