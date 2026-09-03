@@ -421,8 +421,9 @@ pub fn create_icmp_unreachable(sliced: &SlicedPacket, raw_packet: &[u8]) -> Opti
 }
 
 /// Builds the DNS payload for a blocked query: NXDOMAIN, authoritative,
-/// with a root SOA in the authority section (TTL 1). Matches the shape of
-/// the old handrolled `create_null_response` (ANCOUNT=0, NSCOUNT=1).
+/// with an SOA (owner = question name, TTL 1) in the authority section.
+/// Matches the shape of the old handrolled `create_null_response`
+/// (ANCOUNT=0, NSCOUNT=1).
 pub fn build_null_response<Octs: Octets + ?Sized>(
     query: &Message<Octs>,
 ) -> Option<Vec<u8>> {
