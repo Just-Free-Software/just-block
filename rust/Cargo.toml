@@ -21,4 +21,5 @@ etherparse = "0.20.1"
 radix_trie = "0.2"
 lru = "0.12"
 libc = "0.2"
+domain = "0.12"
 
