@@ -399,4 +399,26 @@ mod wire_tests {
         }
         assert!(parse_query(&p).is_none());
     }
+
+    #[test]
+    fn blocked_subdomain_of_blocked_parent_is_blocked() {
+        // Insert "example.com" into a trie the way update_blocklist does,
+        // then check that parse_query("ads.example.com") hits it.
+        use radix_trie::Trie;
+        let mut trie = Trie::new();
+        trie.insert(crate::domain_to_wire_format("example.com"), ());
+        let q = crate::wire_test_util::make_query("ads.example.com");
+        let (_, trie_key) = parse_query(&q).unwrap();
+        assert!(trie.get_ancestor_value(&trie_key).is_some());
+    }
+
+    #[test]
+    fn unblocked_subdomain_does_not_match() {
+        use radix_trie::Trie;
+        let mut trie = Trie::new();
+        trie.insert(crate::domain_to_wire_format("example.com"), ());
+        let q = crate::wire_test_util::make_query("notexample.com");
+        let (_, trie_key) = parse_query(&q).unwrap();
+        assert!(trie.get_ancestor_value(&trie_key).is_none());
+    }
 }

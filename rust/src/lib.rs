@@ -117,7 +117,7 @@ impl DnsProxy {
 /// blocking "example.com" (key: \x03com\x07example) will match
 /// a query for "ads.example.com" (key: \x03com\x07example\x03ads)
 /// because the parent key is a byte-prefix of the child key.
-fn domain_to_wire_format(domain: &str) -> Vec<u8> {
+pub(crate) fn domain_to_wire_format(domain: &str) -> Vec<u8> {
     let mut out = Vec::new();
     let parts: Vec<&str> = domain.split('.').filter(|p| !p.is_empty()).collect();
     for part in parts.iter().rev() {
