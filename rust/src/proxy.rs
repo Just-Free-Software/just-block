@@ -1,35 +1,23 @@
-use etherparse::{PacketBuilder, SlicedPacket, TransportSlice};
-use domain::base::message::Message;
-use domain::base::name::{ToLabelIter, ToName};
 use domain::base::iana::{Class, Rcode};
+use domain::base::message::Message;
 use domain::base::message_builder::MessageBuilder;
 use domain::base::name::Name;
+use domain::base::name::{ToLabelIter, ToName};
 use domain::base::{Serial, Ttl};
 use domain::dep::octseq::octets::Octets;
 use domain::rdata::Soa;
+use etherparse::{PacketBuilder, SlicedPacket, TransportSlice};
 
-/// Returns the minimum TTL over all answer records of a DNS response.
-/// `None` if the payload is not a parseable message or has no answers —
-/// callers treat that as "do not cache".
-pub fn min_ttl(payload: &[u8]) -> Option<u32> {
-    let msg = Message::from_slice(payload).ok()?;
-    msg.answer().ok()?.flatten().map(|rec| rec.ttl().as_secs()).min()
-}
-
-/// Parses a DNS query payload and derives the keys the proxy needs.
+/// Parses a DNS query payload and derives the trie key for blocklist lookups.
 ///
-/// Returns `(cache_key, trie_key)`:
-/// - `cache_key`: lowercased forward wire-format qname (length-prefixed
-///   labels plus root byte), with the big-endian QTYPE and QCLASS appended —
-///   e.g. `example.com A IN` → `\x07example\x03com\x00\x00\x01\x00\x01`.
-/// - `trie_key`: lowercased, label-reversed qname (each label's length byte
-///   kept intact, no root byte) for ancestor lookups in the blocklist trie
-///   — e.g. `ads.example.com` → `\x03com\x07example\x03ads`.
+/// Returns the lowercased, label-reversed qname (each label's length byte
+/// kept intact, no root byte) for ancestor lookups in the blocklist trie
+/// — e.g. `ads.example.com` → `\x03com\x07example\x03ads`.
 ///
 /// Returns `None` for malformed packets, including packets with zero or
 /// multiple questions. Question names compressed via DNS name compression
 /// (0xC0 pointers) are resolved correctly rather than rejected.
-pub fn parse_query(payload: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
+pub fn parse_query(payload: &[u8]) -> Option<Vec<u8>> {
     let msg = Message::from_slice(payload).ok()?;
     let question = msg.sole_question().ok()?;
     let qname = question.qname();
@@ -62,14 +50,14 @@ pub fn parse_query(payload: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
         trie_key.extend_from_slice(&wire[start..end]);
     }
 
-    let mut cache_key = wire;
-    cache_key.extend_from_slice(&question.qtype().to_int().to_be_bytes());
-    cache_key.extend_from_slice(&question.qclass().to_int().to_be_bytes());
-    Some((cache_key, trie_key))
+    Some(trie_key)
 }
 
-
-pub fn create_forwarded_response(sliced: &SlicedPacket, req_payload: &[u8], dns_resp: &[u8]) -> Option<Vec<u8>> {
+pub fn create_forwarded_response(
+    sliced: &SlicedPacket,
+    req_payload: &[u8],
+    dns_resp: &[u8],
+) -> Option<Vec<u8>> {
     let builder = match sliced.net.as_ref()? {
         etherparse::InternetSlice::Ipv4(ipv4) => {
             PacketBuilder::ipv4(ipv4.header().destination(), ipv4.header().source(), 64)
@@ -100,8 +88,8 @@ pub fn create_forwarded_response(sliced: &SlicedPacket, req_payload: &[u8], dns_
 }
 
 pub fn create_tcp_rst(sliced: &SlicedPacket) -> Option<Vec<u8>> {
-    use etherparse::{Ipv4Header, Ipv6Header, TcpHeader, InternetSlice, TransportSlice};
-    
+    use etherparse::{InternetSlice, Ipv4Header, Ipv6Header, TcpHeader, TransportSlice};
+
     let tcp = match sliced.transport.as_ref()? {
         TransportSlice::Tcp(tcp) => tcp,
         _ => return None,
@@ -127,7 +115,8 @@ pub fn create_tcp_rst(sliced: &SlicedPacket) -> Option<Vec<u8>> {
                 etherparse::IpNumber::TCP,
                 ipv4.header().destination(),
                 ipv4.header().source(),
-            ).ok()?;
+            )
+            .ok()?;
             ipv4_resp.write(&mut buf).ok()?;
             tcp_resp.checksum = tcp_resp.calc_checksum_ipv4(&ipv4_resp, &[]).unwrap_or(0);
         }
@@ -146,83 +135,8 @@ pub fn create_tcp_rst(sliced: &SlicedPacket) -> Option<Vec<u8>> {
         }
         _ => return None,
     }
-    
-    tcp_resp.write(&mut buf).ok()?;
-    Some(buf)
-}
 
-#[allow(dead_code)]
-pub fn create_icmp_unreachable(sliced: &SlicedPacket, raw_packet: &[u8]) -> Option<Vec<u8>> {
-    use etherparse::{Ipv4Header, Ipv6Header, Icmpv4Header, Icmpv4Type, icmpv4, Icmpv6Header, Icmpv6Type, icmpv6, InternetSlice};
-    
-    let payload_len = std::cmp::min(raw_packet.len(), 576);
-    let original_bytes = &raw_packet[..payload_len];
-    
-    let mut buf = Vec::with_capacity(payload_len + 64);
-    
-    match sliced.net.as_ref()? {
-        InternetSlice::Ipv4(ipv4) => {
-            let icmp = Icmpv4Header {
-                icmp_type: Icmpv4Type::DestinationUnreachable(icmpv4::DestUnreachableHeader::Port),
-                checksum: 0,
-            };
-            let mut icmp_bytes = icmp.to_bytes();
-            let cksum = etherparse::checksum::Sum16BitWords::new()
-                .add_slice(&icmp_bytes)
-                .add_slice(original_bytes)
-                .ones_complement();
-            let cksum_bytes = cksum.to_be_bytes();
-            icmp_bytes[2] = cksum_bytes[0];
-            icmp_bytes[3] = cksum_bytes[1];
-            
-            let ipv4_resp = Ipv4Header::new(
-                (icmp_bytes.len() + original_bytes.len()) as u16,
-                64,
-                etherparse::IpNumber::ICMP,
-                ipv4.header().destination(),
-                ipv4.header().source(),
-            ).ok()?;
-            ipv4_resp.write(&mut buf).ok()?;
-            buf.extend_from_slice(&icmp_bytes);
-            buf.extend_from_slice(original_bytes);
-        }
-        InternetSlice::Ipv6(ipv6) => {
-            let icmp = Icmpv6Header {
-                icmp_type: Icmpv6Type::DestinationUnreachable(icmpv6::DestUnreachableCode::Port),
-                checksum: 0,
-            };
-            
-            let ipv6_resp = Ipv6Header {
-                traffic_class: 0,
-                flow_label: etherparse::Ipv6FlowLabel::ZERO,
-                payload_length: (8 + original_bytes.len()) as u16,
-                next_header: etherparse::IpNumber::IPV6_ICMP,
-                hop_limit: 64,
-                source: ipv6.header().destination(),
-                destination: ipv6.header().source(),
-            };
-            
-            let mut icmp_bytes = icmp.to_bytes();
-            let cksum = etherparse::checksum::Sum16BitWords::new()
-                .add_16bytes(ipv6_resp.source)
-                .add_16bytes(ipv6_resp.destination)
-                .add_4bytes((ipv6_resp.payload_length as u32).to_be_bytes())
-                .add_2bytes([0, 0])
-                .add_2bytes([0, etherparse::IpNumber::IPV6_ICMP.0])
-                .add_slice(&icmp_bytes)
-                .add_slice(original_bytes)
-                .ones_complement();
-                
-            let cksum_bytes = cksum.to_be_bytes();
-            icmp_bytes[2] = cksum_bytes[0];
-            icmp_bytes[3] = cksum_bytes[1];
-            
-            ipv6_resp.write(&mut buf).ok()?;
-            buf.extend_from_slice(&icmp_bytes);
-            buf.extend_from_slice(original_bytes);
-        }
-        _ => return None,
-    }
+    tcp_resp.write(&mut buf).ok()?;
     Some(buf)
 }
 
@@ -231,9 +145,7 @@ pub fn create_icmp_unreachable(sliced: &SlicedPacket, raw_packet: &[u8]) -> Opti
 /// SOA record in the authority section, owned by the question name
 /// (equivalent to a 0xC00C pointer to the question), TTL 1, and zero
 /// MNAME/RNAME/refresh/retry/expire fields with a 1-second negative TTL.
-pub fn build_null_response<Octs: Octets + ?Sized>(
-    query: &Message<Octs>,
-) -> Option<Vec<u8>> {
+pub fn build_null_response<Octs: Octets + ?Sized>(query: &Message<Octs>) -> Option<Vec<u8>> {
     let question = query.sole_question().ok()?;
     // The SOA owner is the question name (matching the wire-form 0xC00C
     // pointer to the question). Keep that shape.
@@ -262,9 +174,7 @@ pub fn build_null_response<Octs: Octets + ?Sized>(
 
 /// Builds the DNS payload for an unforwardable query: SERVFAIL, empty
 /// sections, echoing the question and transaction ID.
-pub fn build_servfail_response<Octs: Octets + ?Sized>(
-    query: &Message<Octs>,
-) -> Option<Vec<u8>> {
+pub fn build_servfail_response<Octs: Octets + ?Sized>(query: &Message<Octs>) -> Option<Vec<u8>> {
     let builder = MessageBuilder::new_vec()
         .start_answer(query, Rcode::SERVFAIL)
         .ok()?;
@@ -279,12 +189,7 @@ mod wire_tests {
     #[test]
     fn parse_query_builds_unchanged_keys() {
         let q = make_query("ads.Example.COM");
-        let (cache_key, trie_key) = parse_query(&q).unwrap();
-        // cache key: lowercased forward wire format + A (1) IN (1)
-        assert_eq!(
-            &cache_key[..],
-            b"\x03ads\x07example\x03com\x00\x00\x01\x00\x01"
-        );
+        let trie_key = parse_query(&q).unwrap();
         // trie key: reversed labels, no root byte
         assert_eq!(&trie_key[..], trie_key_for("ads.example.com"));
     }
@@ -292,8 +197,7 @@ mod wire_tests {
     #[test]
     fn parse_query_handles_single_label_and_case() {
         let q = make_query("Example.com");
-        let (cache_key, trie_key) = parse_query(&q).unwrap();
-        assert_eq!(&cache_key[..13], b"\x07example\x03com\x00");
+        let trie_key = parse_query(&q).unwrap();
         assert_eq!(&trie_key[..], trie_key_for("example.com"));
     }
 
@@ -303,7 +207,6 @@ mod wire_tests {
         assert!(parse_query(&[]).is_none());
     }
 
-    use crate::wire_test_util::build_query_message;
     use domain::base::iana::Rcode;
 
     #[test]
@@ -323,11 +226,7 @@ mod wire_tests {
         let rec = auth[0].as_ref().unwrap();
         assert_eq!(rec.ttl(), domain::base::Ttl::from_secs(1));
         // SOA owner is the question name (matches legacy 0xC00C pointer)
-        let expected_owner = msg
-            .sole_question()
-            .unwrap()
-            .qname()
-            .to_name::<Vec<u8>>();
+        let expected_owner = msg.sole_question().unwrap().qname().to_name::<Vec<u8>>();
         assert_eq!(rec.owner().to_name::<Vec<u8>>(), expected_owner);
     }
 
@@ -346,36 +245,6 @@ mod wire_tests {
     }
 
     #[test]
-    fn min_ttl_takes_minimum_over_answers() {
-        use domain::base::iana::Class;
-        use domain::base::message_builder::MessageBuilder;
-        use domain::base::name::Name;
-        use domain::base::Ttl;
-        use domain::rdata::A;
-        use std::net::Ipv4Addr;
-
-        let msg = build_query_message("ads.example.com");
-        let mut rb = MessageBuilder::new_vec()
-            .start_answer(&msg, Rcode::NOERROR)
-            .unwrap();
-        let name = Name::vec_from_str("ads.example.com").unwrap();
-        rb.push((name.clone(), Class::IN, Ttl::from_secs(300), A::new(Ipv4Addr::new(1, 2, 3, 4))))
-            .unwrap();
-        rb.push((name, Class::IN, Ttl::from_secs(60), A::new(Ipv4Addr::new(5, 6, 7, 8))))
-            .unwrap();
-        let resp = rb.finish();
-        assert_eq!(min_ttl(&resp), Some(60));
-    }
-
-    #[test]
-    fn min_ttl_none_for_garbage_or_empty_answers() {
-        assert_eq!(min_ttl(&[0u8; 3]), None);
-        let msg = build_query_message("ads.example.com");
-        // A query itself has no answer section records
-        assert_eq!(min_ttl(msg.as_slice()), None);
-    }
-
-    #[test]
     fn parse_query_handles_root_qname() {
         use domain::base::iana::{Class, Rtype};
         use domain::base::name::Name;
@@ -383,15 +252,16 @@ mod wire_tests {
         let mut qb = MessageBuilder::new_vec().question();
         qb.push((Name::root_ref(), Rtype::A, Class::IN)).unwrap();
         let p = qb.finish();
-        let (cache_key, trie_key) = parse_query(&p).unwrap();
+        let trie_key = parse_query(&p).unwrap();
         assert!(trie_key.is_empty());
-        assert_eq!(&cache_key[..], b"\x00\x00\x01\x00\x01");
     }
 
     #[test]
     fn parse_query_rejects_multiple_questions() {
         // Hand-craft: header with QDCOUNT=2, two uncompressed questions.
-        let mut p = vec![0x12, 0x34, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let mut p = vec![
+            0x12, 0x34, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
         for name in ["\x07example\x03com", "\x04test\x03org"] {
             p.extend_from_slice(name.as_bytes());
             p.push(0);
@@ -406,9 +276,9 @@ mod wire_tests {
         // then check that parse_query("ads.example.com") hits it.
         use radix_trie::Trie;
         let mut trie = Trie::new();
-        trie.insert(crate::domain_to_wire_format("example.com"), ());
+        trie.insert(crate::domain_to_wire_format("example.com").unwrap(), ());
         let q = crate::wire_test_util::make_query("ads.example.com");
-        let (_, trie_key) = parse_query(&q).unwrap();
+        let trie_key = parse_query(&q).unwrap();
         assert!(trie.get_ancestor_value(&trie_key).is_some());
     }
 
@@ -416,9 +286,9 @@ mod wire_tests {
     fn unblocked_subdomain_does_not_match() {
         use radix_trie::Trie;
         let mut trie = Trie::new();
-        trie.insert(crate::domain_to_wire_format("example.com"), ());
+        trie.insert(crate::domain_to_wire_format("example.com").unwrap(), ());
         let q = crate::wire_test_util::make_query("notexample.com");
-        let (_, trie_key) = parse_query(&q).unwrap();
+        let trie_key = parse_query(&q).unwrap();
         assert!(trie.get_ancestor_value(&trie_key).is_none());
     }
 }

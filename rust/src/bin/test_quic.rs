@@ -7,7 +7,7 @@ use quic::DoqEndpoint;
 async fn main() {
     println!("Connecting to DoQ...");
     let endpoint = DoqEndpoint::new_v4().unwrap();
-    let doq = endpoint.connect("1.1.1.1", "cloudflare-dns.com").await.unwrap();
+    let doq = endpoint.connect(&"94.140.14.14".parse().unwrap(), "dns.adguard-dns.com").await.unwrap();
     println!("Connected! Sending query...");
 
     // Query for example.com A record

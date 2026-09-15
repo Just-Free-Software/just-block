@@ -17,8 +17,16 @@ endif()
 
 set(RUST_SO_FILE "${RUST_DIR}/target/${RUST_TARGET}/release/libfree_block_rust.so")
 
+# DNS trace logging (FORWARD/BLOCKED domain names) is debug-only.
+# Release .so must never log queried domains.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(RUST_CARGO_FEATURES "--features" "dns-trace")
+else()
+    set(RUST_CARGO_FEATURES "")
+endif()
+
 add_custom_target(cargo_build_always ALL
-    COMMAND ${CMAKE_COMMAND} -E env ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK} PATH=$ENV{PATH}:/home/me/.cargo/bin cargo ndk -t ${ANDROID_ABI} build --release
+    COMMAND ${CMAKE_COMMAND} -E env ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK} PATH=$ENV{PATH}:/home/me/.cargo/bin cargo ndk -t ${ANDROID_ABI} build --release ${RUST_CARGO_FEATURES}
     WORKING_DIRECTORY ${RUST_DIR}
     COMMENT "Building Rust library for ABI ${ANDROID_ABI}"
 )

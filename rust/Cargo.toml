@@ -10,6 +10,11 @@ crate-type = ["cdylib", "lib"]
 name = "uniffi-bindgen"
 path = "src/uniffi-bindgen.rs"
 
+[features]
+# On-device DNS trace logging (FORWARD/BLOCKED lines). Enabled only for
+# debug/test Android builds via CMake; never enabled for release .so.
+dns-trace = []
+
 [dependencies]
 uniffi = { version = "0.31", features = ["tokio", "cli"] }
 tokio = { version = "1", features = ["full"] }
@@ -19,7 +24,6 @@ webpki-roots = "0.26"
 tokio-util = { version = "0.7", features = ["rt"] }
 etherparse = "0.20.1"
 radix_trie = "0.2"
-lru = "0.12"
 libc = "0.2"
 domain = "0.12"
 

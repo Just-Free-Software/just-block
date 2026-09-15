@@ -1,0 +1,168 @@
+package fyi.justfreesoftware.justblock.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import fyi.justfreesoftware.justblock.data.BlocklistState
+
+@Composable
+fun BlocklistsScreen(
+    viewModel: VpnViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val blocklistState by viewModel.blocklistState.collectAsState()
+    val customUrls     by viewModel.customSourceUrls.collectAsState()
+
+    var showInfoDialog by remember { mutableStateOf(false) }
+
+    if (showInfoDialog) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showInfoDialog = false }) {
+            androidx.compose.material3.Surface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = """
+                            We use AdGuard's DNS servers, which blocks most ads by default.
+                            
+                            You can also add your own blocklist URLs here.
+                        """.trimIndent(),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        androidx.compose.material3.TextButton(onClick = { showInfoDialog = false }) {
+                            Text("OK")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    LazyColumn(
+        modifier            = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+
+        // ── Status + refresh ──────────────────────────────────────────────────
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Blocklist Sources",
+                    style = MaterialTheme.typography.displayLarge,
+                )
+                Spacer(Modifier.weight(1f))
+                androidx.compose.material3.IconButton(
+                    onClick = { showInfoDialog = true },
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = "Info",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+            }
+
+            val stateLabel = when (val s = blocklistState) {
+                is BlocklistState.Idle    -> "Blocklist not loaded"
+                is BlocklistState.Loading -> "Updating blocklist…"
+                is BlocklistState.Success -> "${s.totalDomains} domains loaded from blocklists"
+                is BlocklistState.Error   -> "⚠ Error: ${s.message}"
+            }
+
+            Text(
+                text  = stateLabel,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (blocklistState is BlocklistState.Error)
+                    MaterialTheme.colorScheme.error
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick  = { viewModel.refreshBlocklists() },
+                enabled  = blocklistState !is BlocklistState.Loading,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    if (blocklistState is BlocklistState.Loading)
+                        "Updating…"
+                    else
+                        "Refresh Blocklists"
+                )
+            }
+        }
+
+        // ── Custom sources ────────────────────────────────────────────────────
+        item {
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(8.dp))
+            DomainInputRow(
+                placeholder = "https://example.com/blocklist.txt",
+                onAdd       = { viewModel.addCustomSourceUrl(it) },
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+
+        if (customUrls.isEmpty()) {
+            item {
+                Text(
+                    text  = "No custom sources added yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        items(customUrls.toList(), key = { "url_$it" }) { url ->
+            DomainRow(
+                label    = url,
+                onDelete = { viewModel.removeCustomSourceUrl(url) },
+            )
+        }
+
+        item { Spacer(Modifier.height(16.dp)) }
+    }
+}

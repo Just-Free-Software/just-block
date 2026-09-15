@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "dev.michaelylee.freeblocker"
+    namespace = "fyi.justfreesoftware.justblock"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "dev.michaelylee.freeblocker"
+        applicationId = "fyi.justfreesoftware.justblock"
         minSdk = 34
         targetSdk = 37
         versionCode = 1

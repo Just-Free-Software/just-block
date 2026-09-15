@@ -1,7 +1,14 @@
-use quinn::{ClientConfig, Endpoint, Connection};
+use quinn::{ClientConfig, Connection, Endpoint};
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use std::os::fd::AsRawFd;
+
+/// Maximum DNS message size we accept over DoQ. A response larger than
+/// this is rejected rather than truncated, so a corrupted or oversized
+/// message surfaces as an error (SERVFAIL upstream) instead of a
+/// silently truncated packet.
+const MAX_DNS_MESSAGE_SIZE: usize = 8192;
 
 /// Long-lived QUIC endpoint that owns the UDP socket.
 /// Created once per proxy lifetime; reused across DoQ reconnections
@@ -35,7 +42,7 @@ impl DoqEndpoint {
         let socket = std::net::UdpSocket::bind(bind_addr)?;
         socket.set_nonblocking(true)?;
         let socket_fd = socket.as_raw_fd();
-        
+
         let mut endpoint = Endpoint::new(
             quinn::EndpointConfig::default(),
             None,
@@ -44,20 +51,27 @@ impl DoqEndpoint {
         )?;
         endpoint.set_default_client_config(client_config);
 
-        Ok(Self { endpoint, socket_fd })
+        Ok(Self {
+            endpoint,
+            socket_fd,
+        })
     }
 
+    /// FD borrowed from the underlying UDP socket owned by `endpoint`.
+    /// Caller must not close this FD.
+    /// Valid only while this `DoqEndpoint` is alive.
     pub fn get_socket_fd(&self) -> i32 {
         self.socket_fd
     }
 
     /// Creates a new QUIC connection on the existing endpoint.
     /// Only the connection is replaced on reconnect — the socket stays open.
-    pub async fn connect(&self, server: &str, sni: &str) -> Result<DoqClient, Box<dyn std::error::Error + Send + Sync>> {
-        // Because server is now passed as an IP address string (e.g. "94.140.14.14"),
-        // lookup_host will immediately parse it without doing a DNS resolution.
-        let addr = tokio::net::lookup_host(format!("{}:853", server))
-            .await?.next().ok_or("No address found")?;
+    pub async fn connect(
+        &self,
+        server: &IpAddr,
+        sni: &str,
+    ) -> Result<DoqClient, Box<dyn std::error::Error + Send + Sync>> {
+        let addr = SocketAddr::new(*server, 853);
         let connection = self.endpoint.connect(addr, sni)?.await?;
         Ok(DoqClient { connection })
     }
@@ -86,9 +100,15 @@ impl DoqClient {
         self.connection.close_reason().is_none()
     }
 
-    pub async fn send_query(&self, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn send_query(
+        &self,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
         let (mut send, mut recv) = self.connection.open_bi().await?;
 
+        if payload.len() > u16::MAX as usize {
+            return Err("DNS query exceeds maximum DoQ message size".into());
+        }
         let len = (payload.len() as u16).to_be_bytes();
         send.write_all(&len).await?;
         send.write_all(payload).await?;
@@ -97,9 +117,11 @@ impl DoqClient {
         let mut len_buf = [0u8; 2];
         recv.read_exact(&mut len_buf).await?;
         let resp_len = u16::from_be_bytes(len_buf) as usize;
-        let safe_len = std::cmp::min(resp_len, 8192);
+        if resp_len > MAX_DNS_MESSAGE_SIZE {
+            return Err(format!("DoQ response too large: {resp_len} bytes").into());
+        }
 
-        let mut resp_buf = vec![0u8; safe_len];
+        let mut resp_buf = vec![0u8; resp_len];
         recv.read_exact(&mut resp_buf).await?;
 
         Ok(resp_buf)

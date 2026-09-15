@@ -807,10 +807,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_free_block_rust_checksum_method_dnsproxy_get_quic_fd_v6() != 47865.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_free_block_rust_checksum_method_dnsproxy_start() != 15164.toShort()) {
+    if (lib.uniffi_free_block_rust_checksum_method_dnsproxy_start() != 59595.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_free_block_rust_checksum_method_dnsproxy_stop() != 2007.toShort()) {
+    if (lib.uniffi_free_block_rust_checksum_method_dnsproxy_stop() != 29196.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_free_block_rust_checksum_method_dnsproxy_update_blocklist() != 4148.toShort()) {
@@ -1158,8 +1158,19 @@ public interface DnsProxyInterface {
     
     fun `getQuicFdV6`(): kotlin.Int?
     
+    /**
+     * Starts the proxy task. Idempotent: if a task is already running
+     * (and has not been stopped), this is a no-op — it can never spawn a
+     * second reader on the same TUN fd.
+     */
     fun `start`()
     
+    /**
+     * Cancels the running proxy task, if any. Idempotent: calling stop()
+     * when no task is running is a no-op. Unlike the previous design, the
+     * proxy can be started again afterwards — start() mints a fresh
+     * cancellation token per run.
+     */
     fun `stop`()
     
     fun `updateBlocklist`(`domains`: List<kotlin.String>)
@@ -1297,7 +1308,12 @@ open class DnsProxy: Disposable, AutoCloseable, DnsProxyInterface
     }
     
 
-    override fun `start`()
+    
+    /**
+     * Starts the proxy task. Idempotent: if a task is already running
+     * (and has not been stopped), this is a no-op — it can never spawn a
+     * second reader on the same TUN fd.
+     */override fun `start`()
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -1309,7 +1325,13 @@ open class DnsProxy: Disposable, AutoCloseable, DnsProxyInterface
     
     
 
-    override fun `stop`()
+    
+    /**
+     * Cancels the running proxy task, if any. Idempotent: calling stop()
+     * when no task is running is a no-op. Unlike the previous design, the
+     * proxy can be started again afterwards — start() mints a fresh
+     * cancellation token per run.
+     */override fun `stop`()
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
