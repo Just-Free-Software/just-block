@@ -385,22 +385,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
-name = "free_block_rust"
-version = "0.1.0"
-dependencies = [
- "domain",
- "etherparse",
- "libc",
- "quinn",
- "radix_trie",
- "rustls",
- "tokio",
- "tokio-util",
- "uniffi",
- "webpki-roots 0.26.11",
-]
-
-[[package]]
 name = "fs-err"
 version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -653,6 +637,22 @@ dependencies = [
  "futures-util",
  "once_cell",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "just_block_rust"
+version = "0.1.0"
+dependencies = [
+ "domain",
+ "etherparse",
+ "libc",
+ "quinn",
+ "radix_trie",
+ "rustls",
+ "tokio",
+ "tokio-util",
+ "uniffi",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]

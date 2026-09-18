@@ -57,7 +57,7 @@ enum class ThemeMode {
 }
 
 @Composable
-fun FreeBlockerTheme(
+fun JustBlockTheme(
     themeMode: ThemeMode = ThemeMode.Dynamic,
     content: @Composable () -> Unit
 ) {

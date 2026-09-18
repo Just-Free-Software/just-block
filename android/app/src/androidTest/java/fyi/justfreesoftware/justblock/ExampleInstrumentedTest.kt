@@ -19,6 +19,6 @@ class ExampleInstrumentedTest {
     fun useAppContext() {
         // Context of the app under test.
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        assertEquals("dev.michaelylee.freeblocker", appContext.packageName)
+        assertEquals("fyi.justfreesoftware.justblock", appContext.packageName)
     }
 }

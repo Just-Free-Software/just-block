@@ -235,7 +235,7 @@ macro_rules! log_trace {
 }
 use log_trace;
 
-/// Debug logging to Android logcat (tag: freeblock-rust). Temporarily
+/// Debug logging to Android logcat (tag: justblock-rust). Temporarily
 /// wired into log_trace below for on-device regression diagnosis.
 #[cfg(all(target_os = "android", feature = "dns-trace"))]
 mod android_log {
@@ -247,7 +247,7 @@ mod android_log {
     const LOG_DEBUG: i32 = 3;
 
     pub fn write(msg: &str) {
-        let tag = c"freeblock-rust";
+        let tag = c"justblock-rust";
         if let Ok(text) = std::ffi::CString::new(msg) {
             unsafe {
                 __android_log_write(

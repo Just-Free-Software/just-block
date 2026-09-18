@@ -102,7 +102,7 @@ fun BlockedWebsitesScreen(
                             
                             This app will not work properly with private DNS enabled. If you have not touched this Android setting before, you don't need to worry about this.
                             
-                            If the app stops working after long periods it could be due to battery optimization. Consider changing this under Settings > Apps > Free Blocker to Unrestricted.
+                            If the app stops working after long periods it could be due to battery optimization. Consider changing this under Settings > Apps > Just Block to Unrestricted.
                         """.trimIndent(),
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -153,7 +153,7 @@ fun BlockedWebsitesScreen(
                         .padding(start = 8.dp, end = 8.dp, top = 16.dp, bottom = 8.dp)
                 ) {
                     Text(
-                        text = "Free Blocker",
+                        text = "Just Block",
                         style = MaterialTheme.typography.displayLarge
                     )
                     Spacer(Modifier.weight(1f))
@@ -419,7 +419,7 @@ private fun VpnStatusCard(
                     ),
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
-                        .clickable { uriHandler.openUri("https://justfreesoftware.fyi/free-blocker/info/") }
+                        .clickable { uriHandler.openUri("https://justfreesoftware.fyi/just-block/info/") }
                         .padding(4.dp),
                 )
                 Text(
@@ -429,7 +429,7 @@ private fun VpnStatusCard(
                     ),
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
-                        .clickable { uriHandler.openUri("https://justfreesoftware.fyi/free-blocker/privacy-policy/") }
+                        .clickable { uriHandler.openUri("https://justfreesoftware.fyi/just-block/privacy-policy/") }
                         .padding(4.dp),
                 )
             }

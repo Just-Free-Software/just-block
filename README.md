@@ -15,7 +15,7 @@ Just Block uses Android's `VpnService` API to establish a local TUN interface. I
    - **Blocked:** If the domain matches the trie, the proxy immediately responds with a null/unreachable response, preventing the ad/tracker from loading.
    - **Allowed:** If the domain is safe, the query is forwarded to an upstream DNS resolver using DNS-over-QUIC (DoQ) powered by the `quinn` crate in Rust. 
 
-### Core (`free_block_rust` & `fyi.justfreesoftware.justblock.core`)
+### Core (`just_block_rust` & `fyi.justfreesoftware.justblock.core`)
 The VPN orchestration and packet processing happens across Kotlin and Rust boundaries.
 - `MyVpnService.kt`: The `VpnService` implementation. It manages the TUN interface, handles start/stop intents, and orchestrates the VPN lifecycle.
 - `lib.rs` / `quic.rs` / `proxy.rs`: The Rust backend doing asynchronous packet reading/writing (via `tokio`), packet parsing (`etherparse`), DoQ connections (`quinn`), and blocklist enforcement (`radix_trie`).

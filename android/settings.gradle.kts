@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Free Blocker"
+rootProject.name = "Just Block"
 include(":app")

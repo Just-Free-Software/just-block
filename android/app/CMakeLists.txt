@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project("freeblocker_rust_jni")
+project("justblock_rust_jni")
 
 get_filename_component(RUST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../rust" ABSOLUTE)
 
@@ -15,7 +15,7 @@ else()
     message(FATAL_ERROR "Unsupported ABI: ${ANDROID_ABI}")
 endif()
 
-set(RUST_SO_FILE "${RUST_DIR}/target/${RUST_TARGET}/release/libfree_block_rust.so")
+set(RUST_SO_FILE "${RUST_DIR}/target/${RUST_TARGET}/release/libjust_block_rust.so")
 
 # DNS trace logging (FORWARD/BLOCKED domain names) is debug-only.
 # Release .so must never log queried domains.
@@ -40,9 +40,9 @@ add_custom_command(
 add_custom_target(cargo_build ALL DEPENDS ${RUST_SO_FILE})
 add_dependencies(cargo_build cargo_build_always)
 
-add_library(free_block_rust SHARED IMPORTED)
-set_target_properties(free_block_rust PROPERTIES IMPORTED_LOCATION ${RUST_SO_FILE})
+add_library(just_block_rust SHARED IMPORTED)
+set_target_properties(just_block_rust PROPERTIES IMPORTED_LOCATION ${RUST_SO_FILE})
 
 add_library(dummy SHARED dummy.cpp)
-target_link_libraries(dummy free_block_rust)
+target_link_libraries(dummy just_block_rust)
 add_dependencies(dummy cargo_build)

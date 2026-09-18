@@ -43,13 +43,13 @@ import fyi.justfreesoftware.justblock.ui.AppsScreen
 import fyi.justfreesoftware.justblock.ui.BlockedWebsitesScreen
 import fyi.justfreesoftware.justblock.ui.BlocklistsScreen
 import fyi.justfreesoftware.justblock.ui.VpnViewModel
-import fyi.justfreesoftware.justblock.ui.theme.FreeBlockerTheme
+import fyi.justfreesoftware.justblock.ui.theme.JustBlockTheme
 import fyi.justfreesoftware.justblock.ui.theme.ThemeMode
 
 class MainActivity : ComponentActivity() {
 
     companion object {
-        const val ACTION_STOP_AND_CLOSE = "dev.michaelylee.freeblocker.STOP_AND_CLOSE"
+        const val ACTION_STOP_AND_CLOSE = "fyi.justfreesoftware.justblock.STOP_AND_CLOSE"
     }
 
     private val viewModel: VpnViewModel by viewModels()
@@ -105,7 +105,7 @@ class MainActivity : ComponentActivity() {
 
             if (showWelcomeDialog) {
                 var dontShowAgain by remember { mutableStateOf(false) }
-                FreeBlockerTheme(themeMode = ThemeMode.Dark) {
+                JustBlockTheme(themeMode = ThemeMode.Dark) {
                     AlertDialog(
                     onDismissRequest = {
                         // User dismissed by clicking outside or back button
@@ -118,7 +118,7 @@ class MainActivity : ComponentActivity() {
                     },
                     title = {
                         Text(
-                            text = "Welcome to Free Blocker!",
+                            text = "Welcome to Just Block!",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -126,7 +126,7 @@ class MainActivity : ComponentActivity() {
                     text = {
                         Column {
                             Text(
-                                "To provide you with a distraction-free experience, Free Blocker requires two permissions:",
+                                "To provide you with a distraction-free experience, Just Block requires two permissions:",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Spacer(modifier = Modifier.height(12.dp))
@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
                             Spacer(modifier = Modifier.height(12.dp))
                             
                             Text(
-                                "Please grant these permissions on the next screens to start using Free Blocker.",
+                                "Please grant these permissions on the next screens to start using Just Block.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -178,7 +178,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            FreeBlockerTheme(themeMode = themeMode) {
+            JustBlockTheme(themeMode = themeMode) {
                 Scaffold(
                     bottomBar = {
                         NavigationBar {

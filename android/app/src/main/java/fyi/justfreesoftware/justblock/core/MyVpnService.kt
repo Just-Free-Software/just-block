@@ -13,7 +13,7 @@ import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import uniffi.free_block_rust.DnsProxy
+import uniffi.just_block_rust.DnsProxy
 import fyi.justfreesoftware.justblock.MainActivity
 import fyi.justfreesoftware.justblock.ServiceLocator
 import fyi.justfreesoftware.justblock.data.BlocklistRepository
@@ -49,14 +49,14 @@ class MyVpnService : VpnService() {
     companion object {
         private const val TAG = "MyVpnService"
 
-        const val ACTION_START         = "dev.michaelylee.freeblocker.START"
-        const val ACTION_STOP          = "dev.michaelylee.freeblocker.STOP"
-        const val ACTION_SET_BLOCKING  = "dev.michaelylee.freeblocker.SET_BLOCKING"
-        const val ACTION_FLUSH_DNS_CACHE = "dev.michaelylee.freeblocker.FLUSH_DNS_CACHE"
+        const val ACTION_START         = "fyi.justfreesoftware.justblock.START"
+        const val ACTION_STOP          = "fyi.justfreesoftware.justblock.STOP"
+        const val ACTION_SET_BLOCKING  = "fyi.justfreesoftware.justblock.SET_BLOCKING"
+        const val ACTION_FLUSH_DNS_CACHE = "fyi.justfreesoftware.justblock.FLUSH_DNS_CACHE"
         const val EXTRA_BLOCKING_ENABLED = "blocking_enabled"
 
         private const val NOTIFICATION_ID      = 1
-        private const val NOTIFICATION_CHANNEL = "freeblocker_vpn"
+        private const val NOTIFICATION_CHANNEL = "justblock_vpn"
     }
 
     private val userPreferences by lazy { UserPreferences(applicationContext) }
@@ -347,7 +347,7 @@ class MyVpnService : VpnService() {
         }
 
         val builder = Builder()
-            .setSession("FreeBlockerVPN")
+            .setSession("JustBlockVPN")
             // IPv4 Setup
             .addAddress("10.0.0.2", 32)
             .addDnsServer("10.0.0.1")
@@ -378,7 +378,7 @@ class MyVpnService : VpnService() {
         
         // Critical system packages that must bypass the VPN to maintain connectivity signalling
         val systemBypasses = listOf(
-            packageName // FreeBlocker itself
+            packageName // Just Block itself
         )
         bypassedApps.addAll(systemBypasses)
 
@@ -460,7 +460,7 @@ class MyVpnService : VpnService() {
             NOTIFICATION_CHANNEL,
             "VPN Status",
             NotificationManager.IMPORTANCE_LOW,
-        ).apply { description = "Shows while FreeBlocker VPN is active" }
+        ).apply { description = "Shows while Just Block VPN is active" }
 
         getSystemService(NotificationManager::class.java)
             ?.createNotificationChannel(channel)
@@ -480,7 +480,7 @@ class MyVpnService : VpnService() {
         )
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL)
-            .setContentTitle("FreeBlocker is active")
+            .setContentTitle("Just Block is active")
             .setContentText("Blocking ads and trackers")
             .setSmallIcon(android.R.drawable.ic_lock_lock)  // Replace with your own icon
             .setContentIntent(openAppIntent)
