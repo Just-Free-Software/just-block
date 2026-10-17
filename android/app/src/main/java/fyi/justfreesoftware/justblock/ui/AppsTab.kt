@@ -7,6 +7,7 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,7 +15,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,16 +22,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.foundation.clickable
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,6 +37,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,12 +76,14 @@ private fun Drawable.toBitmap(size: Int = 96): Bitmap {
 }
 
 @Composable
-fun AppsScreen(
+fun AppsTab(
     viewModel: VpnViewModel,
+    snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val bypassedApps by viewModel.bypassedApps.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
 
     // Resolve installed apps off the main thread
     var installedApps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
@@ -117,73 +117,7 @@ fun AppsScreen(
                 .thenBy { it.label.lowercase() })
     }
 
-    var showInfoDialog by remember { mutableStateOf(false) }
-
-    if (showInfoDialog) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { showInfoDialog = false }) {
-            androidx.compose.material3.Surface(
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Bypass List Info",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Selected apps will bypass the VPN entirely and use your normal connection. All other apps will have their traffic routed through the VPN to be filtered.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        androidx.compose.material3.TextButton(onClick = { showInfoDialog = false }) {
-                            Text("OK")
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { scaffoldPadding ->
-        Column(modifier = Modifier.fillMaxSize().padding(scaffoldPadding)) {
-        // ── Header ────────────────────────────────────────────────────────
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text  = "Whitelisted Apps",
-                style = MaterialTheme.typography.displayLarge,
-            )
-            Spacer(Modifier.weight(1f))
-            androidx.compose.material3.IconButton(
-                onClick = { showInfoDialog = true },
-                modifier = Modifier.size(56.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Info,
-                    contentDescription = "Info",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(40.dp)
-                )
-            }
-        }
-
+    Column(modifier = modifier.fillMaxSize()) {
         // ── Search bar ────────────────────────────────────────────────────
         OutlinedTextField(
             value         = searchQuery,
@@ -229,7 +163,7 @@ fun AppsScreen(
                                 snackbarHostState.currentSnackbarData?.dismiss()
                                 snackbarHostState.showSnackbar(
                                     message = if (checked) "${app.label} added to bypass list" else "${app.label} removed from bypass list",
-                                    duration = androidx.compose.material3.SnackbarDuration.Short
+                                    duration = SnackbarDuration.Short
                                 )
                             }
                         },
@@ -237,7 +171,6 @@ fun AppsScreen(
                 }
             }
         }
-    }
     }
 }
 

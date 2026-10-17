@@ -39,7 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.core.content.ContextCompat
-import fyi.justfreesoftware.justblock.ui.AppsScreen
+import fyi.justfreesoftware.justblock.ui.WhitelistScreen
 import fyi.justfreesoftware.justblock.ui.BlockedWebsitesScreen
 import fyi.justfreesoftware.justblock.ui.BlocklistsScreen
 import fyi.justfreesoftware.justblock.ui.VpnViewModel
@@ -215,7 +215,7 @@ class MainActivity : ComponentActivity() {
                             viewModel = viewModel,
                             modifier  = Modifier.padding(padding),
                         )
-                        2 -> AppsScreen(
+                        2 -> WhitelistScreen(
                             viewModel = viewModel,
                             modifier  = Modifier.padding(padding),
                         )
