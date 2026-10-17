@@ -381,6 +381,22 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         flushDnsCache()
     }
 
+    /** Outcome of adding a URL/domain via the Whitelist screen's URLs tab. */
+    enum class AddUrlResult { Added, AlreadyWhitelisted, InvalidUrl }
+
+    /**
+     * Whitelists the domain of [raw], which may be a full URL or a bare
+     * domain. Returns the outcome so the UI can show an appropriate
+     * snackbar.
+     */
+    fun addWhitelistedUrl(raw: String): AddUrlResult {
+        val domain = WhitelistUrlParser.extractDomain(raw)
+            ?: return AddUrlResult.InvalidUrl
+        if (domain in whitelistedDomains.value) return AddUrlResult.AlreadyWhitelisted
+        addWhitelistedDomain(domain)
+        return AddUrlResult.Added
+    }
+
     // -------------------------------------------------------------------------
     // Bypassed apps (exceptions)
     // -------------------------------------------------------------------------
