@@ -646,6 +646,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_update_blocklist(
     ): Short
+    external fun uniffi_just_block_rust_checksum_method_dnsproxy_update_pauses(
+    ): Short
     external fun uniffi_just_block_rust_checksum_constructor_dnsproxy_new(
     ): Short
     external fun ffi_just_block_rust_uniffi_contract_version(
@@ -681,6 +683,8 @@ internal object UniffiLib {
     external fun uniffi_just_block_rust_fn_method_dnsproxy_stop(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_just_block_rust_fn_method_dnsproxy_update_blocklist(`ptr`: Long,`domains`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_just_block_rust_fn_method_dnsproxy_update_pauses(`ptr`: Long,`pauses`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun ffi_just_block_rust_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -801,22 +805,25 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_get_quic_fd_v4() != 23223.toShort()) {
+    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_get_quic_fd_v4() != 51051.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_get_quic_fd_v6() != 47865.toShort()) {
+    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_get_quic_fd_v6() != 46647.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_start() != 59595.toShort()) {
+    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_start() != 20057.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_stop() != 29196.toShort()) {
+    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_stop() != 3881.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_update_blocklist() != 4148.toShort()) {
+    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_update_blocklist() != 15180.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_just_block_rust_checksum_constructor_dnsproxy_new() != 4477.toShort()) {
+    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_update_pauses() != 19780.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_just_block_rust_checksum_constructor_dnsproxy_new() != 17275.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -1002,6 +1009,29 @@ public object FfiConverterInt: FfiConverter<Int, Int> {
 /**
  * @suppress
  */
+public object FfiConverterLong: FfiConverter<Long, Long> {
+    override fun lift(value: Long): Long {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Long {
+        return buf.getLong()
+    }
+
+    override fun lower(value: Long): Long {
+        return value
+    }
+
+    override fun allocationSize(value: Long) = 8UL
+
+    override fun write(value: Long, buf: ByteBuffer) {
+        buf.putLong(value)
+    }
+}
+
+/**
+ * @suppress
+ */
 public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
     // Note: we don't inherit from FfiConverterRustBuffer, because we use a
     // special encoding when lowering/lifting.  We can use `RustBuffer.len` to
@@ -1174,6 +1204,14 @@ public interface DnsProxyInterface {
     fun `stop`()
     
     fun `updateBlocklist`(`domains`: List<kotlin.String>)
+    
+    /**
+     * Replaces the pause set. `pauses` maps lowercased domains to epoch-millis
+     * expiry times; `i64::MAX` means an indefinite pause. Pauses are enforced
+     * lazily at query time (see [pause_expired]), so they keep working even
+     * when the Android UI process that owns the countdown timer is gone.
+     */
+    fun `updatePauses`(`pauses`: Map<kotlin.String, kotlin.Long>)
     
     companion object
 }
@@ -1356,6 +1394,24 @@ open class DnsProxy: Disposable, AutoCloseable, DnsProxyInterface
     
 
     
+    /**
+     * Replaces the pause set. `pauses` maps lowercased domains to epoch-millis
+     * expiry times; `i64::MAX` means an indefinite pause. Pauses are enforced
+     * lazily at query time (see [pause_expired]), so they keep working even
+     * when the Android UI process that owns the countdown timer is gone.
+     */override fun `updatePauses`(`pauses`: Map<kotlin.String, kotlin.Long>)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_method_dnsproxy_update_pauses(
+        it,
+        FfiConverterMapStringLong.lower(`pauses`),_status)
+}
+    }
+    
+    
+
+    
 
     
 
@@ -1481,6 +1537,45 @@ public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.Str
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterString.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterMapStringLong: FfiConverterRustBuffer<Map<kotlin.String, kotlin.Long>> {
+    override fun read(buf: ByteBuffer): Map<kotlin.String, kotlin.Long> {
+        val len = buf.getInt()
+        return buildMap<kotlin.String, kotlin.Long>(len) {
+            repeat(len) {
+                val k = FfiConverterString.read(buf)
+                val v = FfiConverterLong.read(buf)
+                this[k] = v
+            }
+        }
+    }
+
+    override fun allocationSize(value: Map<kotlin.String, kotlin.Long>): ULong {
+        val spaceForMapSize = 4UL
+        val spaceForChildren = value.map { (k, v) ->
+            FfiConverterString.allocationSize(k) +
+            FfiConverterLong.allocationSize(v)
+        }.sum()
+        return spaceForMapSize + spaceForChildren
+    }
+
+    override fun write(value: Map<kotlin.String, kotlin.Long>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        // The parens on `(k, v)` here ensure we're calling the right method,
+        // which is important for compatibility with older android devices.
+        // Ref https://blog.danlew.net/2017/03/16/kotlin-puzzler-whose-line-is-it-anyways/
+        value.forEach { (k, v) ->
+            FfiConverterString.write(k, buf)
+            FfiConverterLong.write(v, buf)
         }
     }
 }

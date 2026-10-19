@@ -13,6 +13,7 @@ use proxy::{
 };
 use quic::{DoqClient, DoqEndpoint};
 use radix_trie::Trie;
+use std::collections::HashMap;
 use std::os::fd::RawFd;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Duration;
@@ -55,6 +56,7 @@ pub struct DnsProxy {
     upstream_v6: Option<std::net::IpAddr>,
     sni_hostname: String,
     blocklist: Arc<RwLock<Trie<Vec<u8>, ()>>>,
+    pauses: Arc<RwLock<Trie<Vec<u8>, i64>>>,
     run_slot: Arc<Mutex<RunSlot>>,
     doq_endpoint_v4: Option<Arc<DoqEndpoint>>,
     doq_endpoint_v6: Option<Arc<DoqEndpoint>>,
@@ -102,6 +104,7 @@ impl DnsProxy {
             upstream_v6,
             sni_hostname,
             blocklist: Arc::new(RwLock::new(Trie::new())),
+            pauses: Arc::new(RwLock::new(Trie::new())),
             run_slot: Arc::new(Mutex::new(RunSlot::default())),
             doq_endpoint_v4,
             doq_endpoint_v6,
@@ -149,6 +152,7 @@ impl DnsProxy {
         let upstream_v6 = self.upstream_v6.clone();
         let sni_hostname = self.sni_hostname.clone();
         let blocklist = self.blocklist.clone();
+        let pauses = self.pauses.clone();
         let doq_endpoint_v4 = self.doq_endpoint_v4.clone();
         let doq_endpoint_v6 = self.doq_endpoint_v6.clone();
         let run_slot = self.run_slot.clone();
@@ -160,6 +164,7 @@ impl DnsProxy {
                 upstream_v6,
                 sni_hostname,
                 blocklist,
+                pauses,
                 cancel_token,
                 doq_endpoint_v4,
                 doq_endpoint_v6,
@@ -192,6 +197,16 @@ impl DnsProxy {
         ));
         *lock = trie;
     }
+
+    /// Replaces the pause set. `pauses` maps lowercased domains to epoch-millis
+    /// expiry times; `i64::MAX` means an indefinite pause. Pauses are enforced
+    /// lazily at query time (see [pause_expired]), so they keep working even
+    /// when the Android UI process that owns the countdown timer is gone.
+    pub fn update_pauses(&self, pauses: HashMap<String, i64>) {
+        log_trace!(&format!("update_pauses: {} entries", pauses.len()));
+        let trie = pauses_trie(pauses);
+        *self.pauses.write().unwrap_or_else(|e| e.into_inner()) = trie;
+    }
 }
 
 impl DnsProxy {
@@ -222,6 +237,41 @@ pub(crate) fn domain_to_wire_format(domain: &str) -> Option<Vec<u8>> {
         out.extend_from_slice(part.to_ascii_lowercase().as_bytes());
     }
     Some(out)
+}
+
+/// Converts a domain → expiry map into a reversed wire-format trie, using the
+/// same key encoding as the blocklist trie so ancestor matching is identical.
+pub(crate) fn pauses_trie(pauses: HashMap<String, i64>) -> Trie<Vec<u8>, i64> {
+    let mut trie = Trie::new();
+    for (domain, expires_at) in pauses {
+        if let Some(wire_format) = domain_to_wire_format(&domain) {
+            trie.insert(wire_format, expires_at);
+        }
+    }
+    trie
+}
+
+/// Pure expiry predicate: true when a pause lapsed by `now_ms`.
+fn pause_expired(now_ms: i64, expiry: i64) -> bool {
+    now_ms >= expiry
+}
+
+/// Query-path pause check. Ancestor matching mirrors the blocklist trie
+/// (pausing "example.com" covers "sub.example.com"). The clock is only read
+/// when a pause actually covers `trie_key`, so unpause-covered queries pay
+/// nothing beyond the trie lookup.
+fn pause_lazily_expired(pauses: &Trie<Vec<u8>, i64>, trie_key: &[u8]) -> bool {
+    match pauses.get_ancestor_value(trie_key) {
+        Some(&expiry) => pause_expired(now_epoch_ms(), expiry),
+        None => false,
+    }
+}
+
+fn now_epoch_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(i64::MAX)
 }
 
 /// DNS trace logging. Compiles to nothing (no format!, no allocation, no
@@ -481,6 +531,7 @@ async fn run_proxy(
     upstream_v6: Option<std::net::IpAddr>,
     sni_hostname: String,
     blocklist: Arc<RwLock<Trie<Vec<u8>, ()>>>,
+    pauses: Arc<RwLock<Trie<Vec<u8>, i64>>>,
     cancel_token: CancellationToken,
     doq_endpoint_v4: Option<Arc<DoqEndpoint>>,
     doq_endpoint_v6: Option<Arc<DoqEndpoint>>,
@@ -576,10 +627,22 @@ async fn run_proxy(
                         if udp.destination_port() == 53 {
                             let payload = udp.payload();
                             if let Some(trie_key) = parse_query(payload) {
-                                let blocked = {
+                                let trie_blocked = {
                                     let lock = blocklist.read().unwrap_or_else(|e| e.into_inner());
                                     lock.get_ancestor_value(&trie_key).is_some()
                                 };
+                                let pause_lazily_expired = {
+                                    let lock = pauses.read().unwrap_or_else(|e| e.into_inner());
+                                    let expired = pause_lazily_expired(&lock, &trie_key);
+                                    if expired {
+                                        log_trace!(&format!(
+                                            "pause expired — BLOCKED {}",
+                                            qname_str(payload)
+                                        ));
+                                    }
+                                    expired
+                                };
+                                let blocked = trie_blocked || pause_lazily_expired;
 
                                 if blocked {
                                     log_trace!(&format!("BLOCKED {} -> NXDOMAIN", qname_str(payload)));
@@ -751,5 +814,92 @@ async fn send_servfail(req_ip: &[u8], payload: &[u8], tx: &mpsc::Sender<Vec<u8>>
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expiry_boundary_is_inclusive() {
+        assert!(pause_expired(1000, 1000));
+        assert!(pause_expired(1001, 1000));
+        assert!(!pause_expired(999, 1000));
+    }
+
+    fn trie_from(pauses: &[(&str, i64)]) -> Trie<Vec<u8>, i64> {
+        let map: HashMap<String, i64> = pauses
+            .iter()
+            .map(|(d, e)| (d.to_string(), *e))
+            .collect();
+        pauses_trie(map)
+    }
+
+    fn key(domain: &str) -> Vec<u8> {
+        domain_to_wire_format(domain).unwrap()
+    }
+
+    #[test]
+    fn active_pause_is_not_expired() {
+        let trie = trie_from(&[("example.com", now_epoch_ms() + 60_000)]);
+        assert!(!pause_lazily_expired(&trie, &key("example.com")));
+    }
+
+    #[test]
+    fn expired_pause_is_expired() {
+        let trie = trie_from(&[("example.com", now_epoch_ms() - 1)]);
+        assert!(pause_lazily_expired(&trie, &key("example.com")));
+    }
+
+    #[test]
+    fn indefinite_pause_never_expires() {
+        let trie = trie_from(&[("example.com", i64::MAX)]);
+        assert!(!pause_lazily_expired(&trie, &key("example.com")));
+    }
+
+    #[test]
+    fn expired_pause_covers_subdomains() {
+        let trie = trie_from(&[("example.com", now_epoch_ms() - 1)]);
+        assert!(pause_lazily_expired(&trie, &key("sub.example.com")));
+    }
+
+    #[test]
+    fn active_pause_covers_subdomains() {
+        let trie = trie_from(&[("example.com", now_epoch_ms() + 60_000)]);
+        assert!(!pause_lazily_expired(&trie, &key("sub.example.com")));
+    }
+
+    #[test]
+    fn unpaused_domain_is_untouched() {
+        let trie = trie_from(&[("example.com", now_epoch_ms() - 1)]);
+        assert!(!pause_lazily_expired(&trie, &key("other.com")));
+    }
+
+    #[test]
+    fn empty_pause_set_never_blocks() {
+        let trie = trie_from(&[]);
+        assert!(!pause_lazily_expired(&trie, &key("example.com")));
+    }
+
+    #[test]
+    fn invalid_domains_are_skipped_when_building_the_trie() {
+        // A 64-byte label exceeds the DNS label limit and must be dropped,
+        // not panic.
+        let long_label = "a".repeat(64);
+        let map: HashMap<String, i64> =
+            [(format!("{long_label}.com"), now_epoch_ms() - 1)]
+                .into_iter()
+                .collect();
+        let trie = pauses_trie(map);
+        assert!(!pause_lazily_expired(&trie, &key("example.com")));
+    }
+
+    #[test]
+    fn pauses_trie_uses_lowercase_keys() {
+        let map: HashMap<String, i64> =
+            [("EXAMPLE.com".to_string(), now_epoch_ms() - 1)].into_iter().collect();
+        let trie = pauses_trie(map);
+        assert!(pause_lazily_expired(&trie, &key("example.com")));
     }
 }

@@ -78,8 +78,10 @@ class BlocklistFetcher {
     suspend fun fetch(url: String): Set<String> = withContext(Dispatchers.IO) {
         val result = HashSet<String>()
         val lowerUrl = url.lowercase(Locale.ROOT)
-        if (!lowerUrl.startsWith("http://") && !lowerUrl.startsWith("https://")) {
-            Log.e("BlocklistFetcher", "Invalid URL scheme: $url")
+        // HTTPS only: blocklists are downloaded in the clear with http://, which
+        // leaks browsing-adjacent metadata and lets a MITM swap the blocklist.
+        if (!lowerUrl.startsWith("https://")) {
+            Log.e("BlocklistFetcher", "Invalid URL scheme (HTTPS required): $url")
             return@withContext result
         }
 

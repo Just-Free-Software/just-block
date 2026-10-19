@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.map
@@ -47,10 +48,16 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val persisted = prefs.getPausedDomains()
             val now = System.currentTimeMillis()
+            var hadExpired = false
             for ((domain, expiresAt) in persisted) {
                 if (expiresAt != Long.MAX_VALUE && now >= expiresAt) {
-                    // Already expired — clean up and skip
+                    // Already expired — resume inline (live filter + persisted
+                    // state, awaited) so the UI state read below cannot race a
+                    // pending removal. The Rust proxy has been blocking it
+                    // since expiry; this converges all state.
+                    ServiceLocator.dnsFilter.resumeDomain(domain)
                     prefs.removePausedDomain(domain)
+                    hadExpired = true
                     continue
                 }
                 ServiceLocator.dnsFilter.pauseDomain(domain, expiresAt)
@@ -60,6 +67,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
             }
             // Emit initial state
             _pausedDomains.value = prefs.getPausedDomains()
+            if (hadExpired) {
+                flushDnsCache()
+            }
         }
     }
 
@@ -429,14 +439,19 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun flushDnsCache() {
-        if (isVpnEnabled.value) {
-            val serviceIntent = Intent(getApplication(), MyVpnService::class.java).apply {
-                action = MyVpnService.ACTION_FLUSH_DNS_CACHE
-            }
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                getApplication<Application>().startForegroundService(serviceIntent)
-            } else {
-                getApplication<Application>().startService(serviceIntent)
+        viewModelScope.launch {
+            // Read the persisted setting rather than the isVpnEnabled StateFlow
+            // snapshot — during early init (before UI subscribers attach) the
+            // flow may not have emitted yet and would report a stale false.
+            if (prefs.isVpnEnabledFlow.first()) {
+                val serviceIntent = Intent(getApplication(), MyVpnService::class.java).apply {
+                    action = MyVpnService.ACTION_FLUSH_DNS_CACHE
+                }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    getApplication<Application>().startForegroundService(serviceIntent)
+                } else {
+                    getApplication<Application>().startService(serviceIntent)
+                }
             }
         }
     }

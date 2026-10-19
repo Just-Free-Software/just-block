@@ -115,12 +115,22 @@ fun WhitelistScreen(
                 Tab(
                     selected = selectedTab == 0,
                     onClick  = { selectedTab = 0 },
-                    text     = { Text("URLs") },
+                    text = {
+                        Text(
+                            "URLs",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    },
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick  = { selectedTab = 1 },
-                    text     = { Text("Apps") },
+                    text = {
+                        Text(
+                            "Apps",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    },
                 )
             }
 

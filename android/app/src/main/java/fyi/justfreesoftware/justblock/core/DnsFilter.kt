@@ -15,7 +15,13 @@ class DnsFilter {
     @Volatile
     private var blocklist: Set<String> = emptySet()
 
-    var rustProxyCallback: ((List<String>) -> Unit)? = null
+    /**
+     * Pushes the current blocklist and pause set to the Rust proxy whenever
+     * either changes. The proxy enforces pause expiry lazily at query time,
+     * so pauses keep working even when the app process (and its countdown
+     * timers) is gone.
+     */
+    var rustProxyCallback: ((List<String>, Map<String, Long>) -> Unit)? = null
 
     /**
      * Domains whose blocking is temporarily paused.
@@ -33,7 +39,7 @@ class DnsFilter {
     fun updateBlocklist(newBlocklist: Set<String>) {
         this.blocklist = newBlocklist.filter { it.isNotBlank() }.toSet() - pausedDomains.keys
         Log.d(TAG, "DnsFilter initialized with ${this.blocklist.size} static rules.")
-        rustProxyCallback?.invoke(blocklist.toList())
+        rustProxyCallback?.invoke(blocklist.toList(), pausedDomains.toMap())
     }
 
     /**
@@ -47,7 +53,7 @@ class DnsFilter {
         if (cleaned.isNotEmpty()) {
             blocklist = blocklist + cleaned
             Log.d(TAG, "Added domain to live filter: $cleaned (total: ${blocklist.size})")
-            rustProxyCallback?.invoke(blocklist.toList())
+            rustProxyCallback?.invoke(blocklist.toList(), pausedDomains.toMap())
         }
     }
 
@@ -62,7 +68,7 @@ class DnsFilter {
         if (cleaned.isNotEmpty()) {
             blocklist = blocklist - cleaned
             Log.d(TAG, "Removed domain from live filter: $cleaned (total: ${blocklist.size})")
-            rustProxyCallback?.invoke(blocklist.toList())
+            rustProxyCallback?.invoke(blocklist.toList(), pausedDomains.toMap())
         }
     }
 
@@ -85,7 +91,7 @@ class DnsFilter {
             pausedDomains[cleaned] = expiresAt
             blocklist = blocklist - cleaned
             Log.d(TAG, "Paused domain: $cleaned until ${if (expiresAt == Long.MAX_VALUE) "indefinitely" else expiresAt}")
-            rustProxyCallback?.invoke(blocklist.toList())
+            rustProxyCallback?.invoke(blocklist.toList(), pausedDomains.toMap())
         }
     }
 
@@ -100,7 +106,7 @@ class DnsFilter {
             pausedDomains.remove(cleaned)
             blocklist = blocklist + cleaned
             Log.d(TAG, "Resumed domain: $cleaned (total: ${blocklist.size})")
-            rustProxyCallback?.invoke(blocklist.toList())
+            rustProxyCallback?.invoke(blocklist.toList(), pausedDomains.toMap())
         }
     }
 
@@ -109,8 +115,11 @@ class DnsFilter {
         this.blocklist = emptySet()
         pausedDomains.clear()
         Log.d(TAG, "DnsFilter memory cleared.")
-        rustProxyCallback?.invoke(blocklist.toList())
+        rustProxyCallback?.invoke(blocklist.toList(), pausedDomains.toMap())
     }
 
     fun getBlocklist(): List<String> = blocklist.toList()
+
+    @Synchronized
+    fun getPausedDomains(): Map<String, Long> = pausedDomains.toMap()
 }

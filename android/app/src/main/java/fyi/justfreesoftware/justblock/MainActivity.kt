@@ -13,8 +13,8 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -40,8 +40,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.core.content.ContextCompat
 import fyi.justfreesoftware.justblock.ui.WhitelistScreen
-import fyi.justfreesoftware.justblock.ui.BlockedWebsitesScreen
-import fyi.justfreesoftware.justblock.ui.BlocklistsScreen
+import fyi.justfreesoftware.justblock.ui.HomeScreen
+import fyi.justfreesoftware.justblock.ui.BlockingScreen
 import fyi.justfreesoftware.justblock.ui.VpnViewModel
 import fyi.justfreesoftware.justblock.ui.theme.JustBlockTheme
 import fyi.justfreesoftware.justblock.ui.theme.ThemeMode
@@ -185,33 +185,33 @@ class MainActivity : ComponentActivity() {
                             NavigationBarItem(
                                 selected = selectedTab == 0,
                                 onClick  = { selectedTab = 0 },
-                                icon     = { Icon(Icons.Default.Block, contentDescription = "Blocked") },
-                                label    = { Text("Blocked") },
+                                icon     = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                                label    = { Text("Home") },
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 1,
                                 onClick  = { selectedTab = 1 },
-                                icon     = { Icon(Icons.Default.Shield, contentDescription = "Blocklists") },
-                                label    = { Text("Blocklists") },
+                                icon     = { Icon(Icons.Default.Block, contentDescription = "Blocking") },
+                                label    = { Text("Blocking") },
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 2,
                                 onClick  = { selectedTab = 2 },
-                                icon     = { Icon(Icons.Default.Smartphone, contentDescription = "") },
+                                icon     = { Icon(Icons.Default.VerifiedUser, contentDescription = "") },
                                 label    = { Text("Whitelist") },
                             )
                         }
                     }
                 ) { padding ->
                     when (selectedTab) {
-                        0 -> BlockedWebsitesScreen(
+                        0 -> HomeScreen(
                             viewModel  = viewModel,
                             themeMode = themeMode,
                             onThemeModeChange = { viewModel.setThemeMode(it) },
                             onCloseApp = ::stopVpnAndClose,
                             modifier   = Modifier.padding(padding),
                         )
-                        1 -> BlocklistsScreen(
+                        1 -> BlockingScreen(
                             viewModel = viewModel,
                             modifier  = Modifier.padding(padding),
                         )

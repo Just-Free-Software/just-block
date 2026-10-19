@@ -5,6 +5,13 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
+# The uniffi-generated bindings (uniffi.just_block_rust) use JNA Structures and
+# direct-mapped libraries that resolve native symbols and struct layouts by
+# name via reflection. R8 renaming breaks this at runtime.
+-keep class uniffi.** { *; }
+-keep class com.sun.jna.** { *; }
+-dontwarn com.sun.jna.**
+
 # Strip all android.util.Log calls from release builds.
 # Debug/test builds don't run R8, so tests keep their log output.
 -assumenosideeffects class android.util.Log {

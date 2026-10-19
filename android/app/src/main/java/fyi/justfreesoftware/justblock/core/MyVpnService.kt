@@ -130,6 +130,22 @@ class MyVpnService : VpnService() {
                     return@launch
                 }
 
+                // Restore persisted pauses into the live filter before the
+                // initial push. Without this, a service start without the UI
+                // process (boot, START_STICKY restart) would forget active
+                // pauses and block mid-pause domains.
+                val persistedPauses = userPreferences.getPausedDomains()
+                val now = System.currentTimeMillis()
+                for ((domain, expiresAt) in persistedPauses) {
+                    if (expiresAt != Long.MAX_VALUE && now >= expiresAt) {
+                        // Already expired — drop it; the Rust proxy lazily
+                        // enforces expiry at query time anyway.
+                        userPreferences.removePausedDomain(domain)
+                    } else {
+                        dnsFilter.pauseDomain(domain, expiresAt)
+                    }
+                }
+
                 startTunLoop()
                 registerNetworkCallback()
 
@@ -234,13 +250,16 @@ class MyVpnService : VpnService() {
                 }
             }
             
-            dnsFilter.rustProxyCallback = { domains ->
+            dnsFilter.rustProxyCallback = { domains, pauses ->
                 if (isBlockingEnabled) {
                     dnsProxy?.updateBlocklist(domains)
+                    dnsProxy?.updatePauses(pauses)
                 }
             }
+
             if (isBlockingEnabled) {
                 dnsProxy?.updateBlocklist(dnsFilter.getBlocklist())
+                dnsProxy?.updatePauses(dnsFilter.getPausedDomains())
             }
 
             dnsProxy?.start()
@@ -460,7 +479,10 @@ class MyVpnService : VpnService() {
             NOTIFICATION_CHANNEL,
             "VPN Status",
             NotificationManager.IMPORTANCE_LOW,
-        ).apply { description = "Shows while Just Block VPN is active" }
+        ).apply {
+            description = "Shows while Just Block VPN is active"
+            setShowBadge(false)
+        }
 
         getSystemService(NotificationManager::class.java)
             ?.createNotificationChannel(channel)
@@ -485,6 +507,7 @@ class MyVpnService : VpnService() {
             .setSmallIcon(android.R.drawable.ic_lock_lock)  // Replace with your own icon
             .setContentIntent(openAppIntent)
             .setOngoing(true)
+            .setNumber(0)
             .addAction(android.R.drawable.ic_delete, "Stop", stopIntent)
             .build()
     }
