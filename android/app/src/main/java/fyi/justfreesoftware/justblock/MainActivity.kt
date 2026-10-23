@@ -211,7 +211,8 @@ class MainActivity : ComponentActivity() {
                             viewModel  = viewModel,
                             themeMode = themeMode,
                             onThemeModeChange = { viewModel.setThemeMode(it) },
-                            onAddRule = { selectedTab = 1 },
+                             onOpenBlockingRules = { selectedTab = 1 },
+                             onOpenWhitelist = { selectedTab = 2 },
                             onCloseApp = ::stopVpnAndClose,
                             modifier   = Modifier.padding(padding),
                         )

@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -59,20 +57,22 @@ fun HomeScreen(
     viewModel: VpnViewModel,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
-    onAddRule: () -> Unit,
+    onOpenBlockingRules: () -> Unit,
+    onOpenWhitelist: () -> Unit,
     onCloseApp: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isVpnEnabled      by viewModel.isVpnEnabled.collectAsState()
+    val isBlockingEnabled by viewModel.isBlockingEnabled.collectAsState()
     val isStartOnBoot     by viewModel.isStartOnBoot.collectAsState()
     val blocklistState    by viewModel.blocklistState.collectAsState()
     val pendingRestart    by viewModel.pendingRestartReason.collectAsState()
     val upstream          by viewModel.upstreamConfig.collectAsState()
     val customUrls        by viewModel.customSourceUrls.collectAsState()
     val manualBlocked     by viewModel.manualBlockedDomains.collectAsState()
+    val whitelisted       by viewModel.whitelistedDomains.collectAsState()
     val snackbarHost      = remember { SnackbarHostState() }
     var showInfoDialog    by remember { mutableStateOf(false) }
-    var isThemeVisible    by remember { mutableStateOf(true) }
 
     if (showInfoDialog) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { showInfoDialog = false }) {
@@ -127,7 +127,7 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(scaffoldPadding)
                 .padding(horizontal = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
 
             // ── App Header ────────────────────────────────────────────────────
@@ -161,60 +161,72 @@ fun HomeScreen(
             item {
                 VpnStatusCard(
                     isVpnEnabled        = isVpnEnabled,
+                    isBlockingEnabled   = isBlockingEnabled,
                     isStartOnBoot       = isStartOnBoot,
                     blocklistState      = blocklistState,
                     hasCustomUrls       = customUrls.isNotEmpty(),
-                    manualBlockedCount  = manualBlocked.size,
-                    onAddRule           = onAddRule,
+                    onBlockingToggle    = { viewModel.setBlockingEnabled(it) },
                     onStartOnBootToggle = { viewModel.setStartOnBoot(it) },
                     onCloseApp          = onCloseApp,
                 )
             }
 
-            // ── Theme Selection ───────────────────────────────────────────────
+            // ── Blocking Rules ────────────────────────────────────────────────
             item {
-                Column(
-                    modifier = Modifier
-                        .padding(top = 12.dp, bottom = 4.dp)
-                        .padding(horizontal = 8.dp),
+                Card(
+                    colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    modifier  = Modifier.fillMaxWidth(),
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { isThemeVisible = !isThemeVisible },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text  = "Change Theme",
-                            style = HeaderTextStyle,
-                        )
-                        Spacer(Modifier.weight(1f))
-                        androidx.compose.material3.Surface(
-                            shape = androidx.compose.foundation.shape.CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier             = Modifier.fillMaxWidth(),
                         ) {
-                            IconButton(onClick = { isThemeVisible = !isThemeVisible }) {
-                                Icon(
-                                    imageVector = if (isThemeVisible) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    contentDescription = if (isThemeVisible) "Collapse theme" else "Expand theme"
-                                )
-                            }
+                            BlockingRulesBox(
+                                label = if (manualBlocked.size == 1) "blocked site"
+                                        else "blocked sites",
+                                count = manualBlocked.size,
+                                modifier = Modifier.weight(1f),
+                                onClick = onOpenBlockingRules,
+                            )
+                            BlockingRulesBox(
+                                label = if (whitelisted.size == 1) "whitelisted site"
+                                        else "whitelisted sites",
+                                count = whitelisted.size,
+                                modifier = Modifier.weight(1f),
+                                onClick = onOpenWhitelist,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = onOpenBlockingRules,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Add a rule")
                         }
                     }
                 }
+            }
 
-                if (isThemeVisible) {
-                    SingleChoiceSegmentedButtonRow(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
-                    ) {
-                        ThemeMode.values().forEachIndexed { index, mode ->
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = ThemeMode.values().size),
-                                onClick = { onThemeModeChange(mode) },
-                                selected = mode == themeMode,
-                                icon = {} // text only
-                            ) {
-                                Text(mode.name)
+            // ── Theme Selection ───────────────────────────────────────────────
+            item {
+                Card(
+                    colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    modifier  = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        SingleChoiceSegmentedButtonRow(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            ThemeMode.values().forEachIndexed { index, mode ->
+                                SegmentedButton(
+                                    shape = SegmentedButtonDefaults.itemShape(index = index, count = ThemeMode.values().size),
+                                    onClick = { onThemeModeChange(mode) },
+                                    selected = mode == themeMode,
+                                    icon = {} // text only
+                                ) {
+                                    Text(mode.name)
+                                }
                             }
                         }
                     }
@@ -226,16 +238,52 @@ fun HomeScreen(
     }
 }
 
+// ── Blocking rules stat box ───────────────────────────────────────────────────
+
+@Composable
+private fun BlockingRulesBox(
+    label    : String,
+    count    : Int,
+    onClick  : () -> Unit,
+    modifier : Modifier = Modifier,
+) {
+    androidx.compose.material3.Surface(
+        shape  = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        color  = MaterialTheme.colorScheme.surface,
+        onClick = onClick,
+        modifier = modifier,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier           = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp, horizontal = 8.dp),
+        ) {
+            Text(
+                text  = count.toString(),
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text  = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 // ── VPN status card ───────────────────────────────────────────────────────────
 
 @Composable
 private fun VpnStatusCard(
     isVpnEnabled        : Boolean,
+    isBlockingEnabled   : Boolean,
     isStartOnBoot       : Boolean,
     blocklistState      : BlocklistState,
     hasCustomUrls       : Boolean,
-    manualBlockedCount  : Int,
-    onAddRule           : () -> Unit,
+    onBlockingToggle    : (Boolean) -> Unit,
     onStartOnBootToggle : (Boolean) -> Unit,
     onCloseApp          : () -> Unit,
 ) {
@@ -247,20 +295,20 @@ private fun VpnStatusCard(
     ) {
         Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 12.dp)) {
 
-            // ── Blocked websites row ──────────────────────────────────────────
+            // ── Enable blocking row ──────────────────────────────────────────
             Row(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier              = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text  = if (manualBlockedCount == 1) "1 website blocked"
-                            else "$manualBlockedCount websites blocked",
+                    text  = "Enable blocking",
                     style = MaterialTheme.typography.bodyLarge,
                 )
-                Button(onClick = onAddRule) {
-                    Text("Add a rule")
-                }
+                Switch(
+                    checked         = isBlockingEnabled,
+                    onCheckedChange = onBlockingToggle,
+                )
             }
 
             Spacer(Modifier.height(2.dp))
