@@ -99,6 +99,43 @@ internal open class ForeignBytes : Structure() {
 
     class ByValue : ForeignBytes(), Structure.ByValue
 }
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Only `lower` is valid — zero-copy byte buffers only flow foreign -> Rust,
+// and only in argument position. `lift`, `read`, `write`, and
+// `allocationSize` have no sound implementation here and all panic at
+// runtime. The `FfiConverter` interface is implemented so that the
+// compiler enforces the full method set (rather than relying on eyeball).
+//
+// The provided `ByteBuffer` MUST be direct — only direct buffers have a
+// stable native address that JNA can expose via `getDirectBufferPointer`.
+// The returned `ForeignBytes.ByValue` is only valid for the duration of
+// the FFI call; the Rust side treats it as a borrow.
+internal object FfiConverterByRefBytes : FfiConverter<java.nio.ByteBuffer, ForeignBytes.ByValue> {
+    override fun lower(value: java.nio.ByteBuffer): ForeignBytes.ByValue {
+        require(value.isDirect) { "UniFFI zero-copy &[u8] requires a direct ByteBuffer. Use ByteBuffer.allocateDirect()." }
+        val remaining = value.remaining()
+        val fb = ForeignBytes.ByValue()
+        fb.len = remaining
+        // Zero-length direct buffers: skip getDirectBufferPointer (platform-variable behavior)
+        // and pass null. The Rust side treats (null, 0) as &[].
+        fb.data = if (remaining == 0) null else com.sun.jna.Native.getDirectBufferPointer(value)
+        return fb
+    }
+
+    override fun lift(value: ForeignBytes.ByValue): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+
+    override fun read(buf: java.nio.ByteBuffer): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun write(value: java.nio.ByteBuffer, buf: java.nio.ByteBuffer): Unit =
+        error("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun allocationSize(value: java.nio.ByteBuffer): ULong =
+        error("ByRef bytes have no RustBuffer allocation size: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+}
 /**
  * The FfiConverter interface handles converter types to and from the FFI
  *
@@ -636,20 +673,20 @@ internal object IntegrityCheckingUniffiLib {
         uniffiCheckContractApiVersion(this)
         uniffiCheckApiChecksums(this)
     }
-    external fun uniffi_just_block_rust_checksum_method_dnsproxy_get_quic_fd_v4(
-    ): Short
-    external fun uniffi_just_block_rust_checksum_method_dnsproxy_get_quic_fd_v6(
-    ): Short
+
+    internal fun ensureInitialized() = Unit
+    external fun uniffi_just_block_rust_checksum_method_dnsproxy_get_quic_fds(
+    ): Int
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_start(
-    ): Short
+    ): Int
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_stop(
-    ): Short
+    ): Int
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_update_blocklist(
-    ): Short
+    ): Int
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_update_pauses(
-    ): Short
+    ): Int
     external fun uniffi_just_block_rust_checksum_constructor_dnsproxy_new(
-    ): Short
+    ): Int
     external fun ffi_just_block_rust_uniffi_contract_version(
     ): Int
 
@@ -668,15 +705,15 @@ internal object UniffiLib {
         Native.register(UniffiLib::class.java, findLibraryName(componentName = "just_block_rust"))
         
     }
+
+    internal fun ensureInitialized() = Unit
     external fun uniffi_just_block_rust_fn_clone_dnsproxy(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_just_block_rust_fn_free_dnsproxy(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    external fun uniffi_just_block_rust_fn_constructor_dnsproxy_new(`tunFd`: Int,`upstreamV4`: RustBuffer.ByValue,`upstreamV6`: RustBuffer.ByValue,`sniHostname`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_just_block_rust_fn_constructor_dnsproxy_new(`tunFd`: Int,`upstreamV4`: RustBuffer.ByValue,`upstreamV6`: RustBuffer.ByValue,`sniHostname`: RustBuffer.ByValue,`doh3Backups`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
-    external fun uniffi_just_block_rust_fn_method_dnsproxy_get_quic_fd_v4(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    external fun uniffi_just_block_rust_fn_method_dnsproxy_get_quic_fd_v6(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_just_block_rust_fn_method_dnsproxy_get_quic_fds(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_just_block_rust_fn_method_dnsproxy_start(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -701,7 +738,7 @@ internal object UniffiLib {
     external fun ffi_just_block_rust_rust_future_free_u8(`handle`: Long,
     ): Unit
     external fun ffi_just_block_rust_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Byte
+    ): Int
     external fun ffi_just_block_rust_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
     external fun ffi_just_block_rust_rust_future_cancel_i8(`handle`: Long,
@@ -717,7 +754,7 @@ internal object UniffiLib {
     external fun ffi_just_block_rust_rust_future_free_u16(`handle`: Long,
     ): Unit
     external fun ffi_just_block_rust_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Short
+    ): Int
     external fun ffi_just_block_rust_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
     external fun ffi_just_block_rust_rust_future_cancel_i16(`handle`: Long,
@@ -805,25 +842,22 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_get_quic_fd_v4() != 51051.toShort()) {
+    if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_get_quic_fds() and 0xFFFF) != 50249) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_get_quic_fd_v6() != 46647.toShort()) {
+    if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_start() and 0xFFFF) != 44838) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_start() != 20057.toShort()) {
+    if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_stop() and 0xFFFF) != 15748) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_stop() != 3881.toShort()) {
+    if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_update_blocklist() and 0xFFFF) != 1097) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_update_blocklist() != 15180.toShort()) {
+    if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_update_pauses() and 0xFFFF) != 27659) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_just_block_rust_checksum_method_dnsproxy_update_pauses() != 19780.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_just_block_rust_checksum_constructor_dnsproxy_new() != 17275.toShort()) {
+    if ((lib.uniffi_just_block_rust_checksum_constructor_dnsproxy_new() and 0xFFFF) != 60840) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -832,10 +866,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
  * @suppress
  */
 public fun uniffiEnsureInitialized() {
-    IntegrityCheckingUniffiLib
-    // UniffiLib() initialized as objects are used, but we still need to explicitly
-    // reference it so initialization across crates works as expected.
-    UniffiLib
+    // Call arbitrary methods on IntegrityCheckingUniffiLib and UniffiLib to ensure that
+    // their init blocks run. This ensures initialization across crates works as expected.
+    IntegrityCheckingUniffiLib.ensureInitialized()
+    UniffiLib.ensureInitialized()
 }
 
 // Async support
@@ -1184,9 +1218,11 @@ public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
 
 public interface DnsProxyInterface {
     
-    fun `getQuicFdV4`(): kotlin.Int?
-    
-    fun `getQuicFdV6`(): kotlin.Int?
+    /**
+     * All QUIC socket fds owned by this proxy (DoQ + DoH3). Every one must
+     * be protected from the VPN tunnel by the Android side before use.
+     */
+    fun `getQuicFds`(): List<kotlin.Int>
     
     /**
      * Starts the proxy task. Idempotent: if a task is already running
@@ -1240,12 +1276,17 @@ open class DnsProxy: Disposable, AutoCloseable, DnsProxyInterface
         this.handle = 0
         this.cleanable = null
     }
-    constructor(`tunFd`: kotlin.Int, `upstreamV4`: kotlin.String?, `upstreamV6`: kotlin.String?, `sniHostname`: kotlin.String) :
+    constructor(`tunFd`: kotlin.Int, `upstreamV4`: kotlin.String?, `upstreamV6`: kotlin.String?, `sniHostname`: kotlin.String, `doh3Backups`: List<Doh3Backup>) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_just_block_rust_fn_constructor_dnsproxy_new(
     
-        FfiConverterInt.lower(`tunFd`),FfiConverterOptionalString.lower(`upstreamV4`),FfiConverterOptionalString.lower(`upstreamV6`),FfiConverterString.lower(`sniHostname`),_status)
+        
+        FfiConverterInt.lower(`tunFd`),
+        FfiConverterOptionalString.lower(`upstreamV4`),
+        FfiConverterOptionalString.lower(`upstreamV6`),
+        FfiConverterString.lower(`sniHostname`),
+        FfiConverterSequenceTypeDoh3Backup.lower(`doh3Backups`),_status)
 }
     )
 
@@ -1254,6 +1295,11 @@ open class DnsProxy: Disposable, AutoCloseable, DnsProxyInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -1320,24 +1366,15 @@ open class DnsProxy: Disposable, AutoCloseable, DnsProxyInterface
         }
     }
 
-    override fun `getQuicFdV4`(): kotlin.Int? {
-            return FfiConverterOptionalInt.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_just_block_rust_fn_method_dnsproxy_get_quic_fd_v4(
-        it,
-        _status)
-}
-    }
-    )
-    }
     
-
-    override fun `getQuicFdV6`(): kotlin.Int? {
-            return FfiConverterOptionalInt.lift(
+    /**
+     * All QUIC socket fds owned by this proxy (DoQ + DoH3). Every one must
+     * be protected from the VPN tunnel by the Android side before use.
+     */override fun `getQuicFds`(): List<kotlin.Int> {
+            return FfiConverterSequenceInt.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_just_block_rust_fn_method_dnsproxy_get_quic_fd_v6(
+    UniffiLib.uniffi_just_block_rust_fn_method_dnsproxy_get_quic_fds(
         it,
         _status)
 }
@@ -1387,6 +1424,7 @@ open class DnsProxy: Disposable, AutoCloseable, DnsProxyInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_just_block_rust_fn_method_dnsproxy_update_blocklist(
         it,
+        
         FfiConverterSequenceString.lower(`domains`),_status)
 }
     }
@@ -1405,6 +1443,7 @@ open class DnsProxy: Disposable, AutoCloseable, DnsProxyInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_just_block_rust_fn_method_dnsproxy_update_pauses(
         it,
+        
         FfiConverterMapStringLong.lower(`pauses`),_status)
 }
     }
@@ -1451,33 +1490,53 @@ public object FfiConverterTypeDnsProxy: FfiConverter<DnsProxy, Long> {
 
 
 
+/**
+ * A backup upstream reachable over DoH3 (DNS over HTTP/3, RFC 8484 body
+ * over an HTTP/3 POST). Cloudflare and Google both offer this but not DoQ.
+ */
+data class Doh3Backup (
+    var `addrV4`: kotlin.String?
+    , 
+    var `addrV6`: kotlin.String?
+    , 
+    var `sniHostname`: kotlin.String
+    , 
+    var `path`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
 
 /**
  * @suppress
  */
-public object FfiConverterOptionalInt: FfiConverterRustBuffer<kotlin.Int?> {
-    override fun read(buf: ByteBuffer): kotlin.Int? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterInt.read(buf)
+public object FfiConverterTypeDoh3Backup: FfiConverterRustBuffer<Doh3Backup> {
+    override fun read(buf: ByteBuffer): Doh3Backup {
+        return Doh3Backup(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
     }
 
-    override fun allocationSize(value: kotlin.Int?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterInt.allocationSize(value)
-        }
-    }
+    override fun allocationSize(value: Doh3Backup) = (
+            FfiConverterOptionalString.allocationSize(value.`addrV4`) +
+            FfiConverterOptionalString.allocationSize(value.`addrV6`) +
+            FfiConverterString.allocationSize(value.`sniHostname`) +
+            FfiConverterString.allocationSize(value.`path`)
+    )
 
-    override fun write(value: kotlin.Int?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterInt.write(value, buf)
-        }
+    override fun write(value: Doh3Backup, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`addrV4`, buf)
+            FfiConverterOptionalString.write(value.`addrV6`, buf)
+            FfiConverterString.write(value.`sniHostname`, buf)
+            FfiConverterString.write(value.`path`, buf)
     }
 }
 
@@ -1519,6 +1578,34 @@ public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?>
 /**
  * @suppress
  */
+public object FfiConverterSequenceInt: FfiConverterRustBuffer<List<kotlin.Int>> {
+    override fun read(buf: ByteBuffer): List<kotlin.Int> {
+        val len = buf.getInt()
+        return List<kotlin.Int>(len) {
+            FfiConverterInt.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<kotlin.Int>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterInt.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<kotlin.Int>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterInt.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.String>> {
     override fun read(buf: ByteBuffer): List<kotlin.String> {
         val len = buf.getInt()
@@ -1537,6 +1624,34 @@ public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.Str
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterString.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeDoh3Backup: FfiConverterRustBuffer<List<Doh3Backup>> {
+    override fun read(buf: ByteBuffer): List<Doh3Backup> {
+        val len = buf.getInt()
+        return List<Doh3Backup>(len) {
+            FfiConverterTypeDoh3Backup.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<Doh3Backup>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeDoh3Backup.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<Doh3Backup>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeDoh3Backup.write(it, buf)
         }
     }
 }

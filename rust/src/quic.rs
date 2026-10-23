@@ -11,29 +11,43 @@ use std::os::fd::AsRawFd;
 const MAX_DNS_MESSAGE_SIZE: usize = 8192;
 
 /// Long-lived QUIC endpoint that owns the UDP socket.
-/// Created once per proxy lifetime; reused across DoQ reconnections
-/// to prevent file-descriptor leaks.
-pub struct DoqEndpoint {
+/// Created once per proxy lifetime; reused across reconnections
+/// to prevent file-descriptor leaks. Serves either DoQ or DoH3
+/// depending on the ALPN it was configured with.
+pub struct QuicEndpoint {
     endpoint: Endpoint,
     socket_fd: i32,
+    port: u16,
 }
 
-impl DoqEndpoint {
-    pub fn new_v4() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        Self::new_with_bind("0.0.0.0:0")
+impl QuicEndpoint {
+    pub fn new_doq_v4() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Self::new_with_bind("0.0.0.0:0", b"doq", 853)
     }
 
-    pub fn new_v6() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        Self::new_with_bind("[::]:0")
+    pub fn new_doq_v6() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Self::new_with_bind("[::]:0", b"doq", 853)
     }
 
-    fn new_with_bind(bind_addr: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn new_h3_v4() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Self::new_with_bind("0.0.0.0:0", b"h3", 443)
+    }
+
+    pub fn new_h3_v6() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Self::new_with_bind("[::]:0", b"h3", 443)
+    }
+
+    fn new_with_bind(
+        bind_addr: &str,
+        alpn: &[u8],
+        port: u16,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut roots = rustls::RootCertStore::empty();
         roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
         let mut crypto = rustls::ClientConfig::builder()
             .with_root_certificates(roots)
             .with_no_client_auth();
-        crypto.alpn_protocols = vec![b"doq".to_vec()];
+        crypto.alpn_protocols = vec![alpn.to_vec()];
 
         let client_config = ClientConfig::new(Arc::new(
             quinn::crypto::rustls::QuicClientConfig::try_from(crypto)?,
@@ -54,26 +68,29 @@ impl DoqEndpoint {
         Ok(Self {
             endpoint,
             socket_fd,
+            port,
         })
     }
 
     /// FD borrowed from the underlying UDP socket owned by `endpoint`.
     /// Caller must not close this FD.
-    /// Valid only while this `DoqEndpoint` is alive.
+    /// Valid only while this `QuicEndpoint` is alive.
     pub fn get_socket_fd(&self) -> i32 {
         self.socket_fd
     }
 
     /// Creates a new QUIC connection on the existing endpoint.
     /// Only the connection is replaced on reconnect — the socket stays open.
+    /// The returned raw connection is wrapped into a DoQ or DoH3 session by
+    /// the caller.
     pub async fn connect(
         &self,
         server: &IpAddr,
         sni: &str,
-    ) -> Result<DoqClient, Box<dyn std::error::Error + Send + Sync>> {
-        let addr = SocketAddr::new(*server, 853);
+    ) -> Result<Connection, Box<dyn std::error::Error + Send + Sync>> {
+        let addr = SocketAddr::new(*server, self.port);
         let connection = self.endpoint.connect(addr, sni)?.await?;
-        Ok(DoqClient { connection })
+        Ok(connection)
     }
 }
 
@@ -83,13 +100,19 @@ pub struct DoqClient {
     connection: Connection,
 }
 
+impl DoqClient {
+    pub fn new(connection: Connection) -> Self {
+        Self { connection }
+    }
+}
+
 impl Drop for DoqClient {
     fn drop(&mut self) {
         self.connection.close(0u32.into(), b"App Teardown");
     }
 }
 
-impl Drop for DoqEndpoint {
+impl Drop for QuicEndpoint {
     fn drop(&mut self) {
         self.endpoint.close(0u32.into(), b"Endpoint Teardown");
     }

@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fyi.justfreesoftware.justblock.data.BlocklistState
+import fyi.justfreesoftware.justblock.ui.theme.HeaderTextStyle
 import fyi.justfreesoftware.justblock.ui.theme.ThemeMode
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,16 +59,17 @@ fun HomeScreen(
     viewModel: VpnViewModel,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    onAddRule: () -> Unit,
     onCloseApp: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isVpnEnabled      by viewModel.isVpnEnabled.collectAsState()
-    val isBlockingEnabled by viewModel.isBlockingEnabled.collectAsState()
     val isStartOnBoot     by viewModel.isStartOnBoot.collectAsState()
     val blocklistState    by viewModel.blocklistState.collectAsState()
     val pendingRestart    by viewModel.pendingRestartReason.collectAsState()
     val upstream          by viewModel.upstreamConfig.collectAsState()
     val customUrls        by viewModel.customSourceUrls.collectAsState()
+    val manualBlocked     by viewModel.manualBlockedDomains.collectAsState()
     val snackbarHost      = remember { SnackbarHostState() }
     var showInfoDialog    by remember { mutableStateOf(false) }
     var isThemeVisible    by remember { mutableStateOf(true) }
@@ -138,7 +140,7 @@ fun HomeScreen(
                 ) {
                     Text(
                         text = "Just Block",
-                        style = MaterialTheme.typography.displayLarge
+                        style = HeaderTextStyle
                     )
                     Spacer(Modifier.weight(1f))
                     androidx.compose.material3.IconButton(
@@ -159,11 +161,11 @@ fun HomeScreen(
             item {
                 VpnStatusCard(
                     isVpnEnabled        = isVpnEnabled,
-                    isBlockingEnabled   = isBlockingEnabled,
                     isStartOnBoot       = isStartOnBoot,
                     blocklistState      = blocklistState,
                     hasCustomUrls       = customUrls.isNotEmpty(),
-                    onBlockingToggle    = { viewModel.setBlockingEnabled(it) },
+                    manualBlockedCount  = manualBlocked.size,
+                    onAddRule           = onAddRule,
                     onStartOnBootToggle = { viewModel.setStartOnBoot(it) },
                     onCloseApp          = onCloseApp,
                 )
@@ -184,7 +186,7 @@ fun HomeScreen(
                     ) {
                         Text(
                             text  = "Change Theme",
-                            style = MaterialTheme.typography.displayMedium,
+                            style = HeaderTextStyle,
                         )
                         Spacer(Modifier.weight(1f))
                         androidx.compose.material3.Surface(
@@ -200,7 +202,7 @@ fun HomeScreen(
                         }
                     }
                 }
-                
+
                 if (isThemeVisible) {
                     SingleChoiceSegmentedButtonRow(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
@@ -229,11 +231,11 @@ fun HomeScreen(
 @Composable
 private fun VpnStatusCard(
     isVpnEnabled        : Boolean,
-    isBlockingEnabled   : Boolean,
     isStartOnBoot       : Boolean,
     blocklistState      : BlocklistState,
     hasCustomUrls       : Boolean,
-    onBlockingToggle    : (Boolean) -> Unit,
+    manualBlockedCount  : Int,
+    onAddRule           : () -> Unit,
     onStartOnBootToggle : (Boolean) -> Unit,
     onCloseApp          : () -> Unit,
 ) {
@@ -245,20 +247,20 @@ private fun VpnStatusCard(
     ) {
         Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 12.dp)) {
 
-            // ── Blocking enabled row ──────────────────────────────────────────
+            // ── Blocked websites row ──────────────────────────────────────────
             Row(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier              = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text  = "Enable blocking",
+                    text  = if (manualBlockedCount == 1) "1 website blocked"
+                            else "$manualBlockedCount websites blocked",
                     style = MaterialTheme.typography.bodyLarge,
                 )
-                Switch(
-                    checked         = isBlockingEnabled,
-                    onCheckedChange = onBlockingToggle,
-                )
+                Button(onClick = onAddRule) {
+                    Text("Add a rule")
+                }
             }
 
             Spacer(Modifier.height(2.dp))
@@ -335,6 +337,10 @@ private fun VpnStatusCard(
                     Text("Stop & Close")
                 }
             }
+
+            Spacer(Modifier.height(2.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+            Spacer(Modifier.height(2.dp))
 
             Row(
                 modifier = Modifier

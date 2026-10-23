@@ -212,6 +212,12 @@ class UserPreferences(private val context: Context) {
         }
     }
 
+    suspend fun setBypassedApps(apps: Set<String>) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.BYPASSED_APPS] = apps
+        }
+    }
+
     // ── Paused domains (per-domain temporary unblock) ─────────────────────────
 
     /**

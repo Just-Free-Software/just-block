@@ -8,6 +8,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,6 +28,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
@@ -43,6 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -105,6 +109,7 @@ fun AppsTab(
     }
 
     var searchQuery by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
 
     val displayedApps = remember(installedApps, searchQuery, bypassedApps) {
         installedApps
@@ -117,7 +122,13 @@ fun AppsTab(
                 .thenBy { it.label.lowercase() })
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures { focusManager.clearFocus() }
+            }
+    ) {
         // ── Search bar ────────────────────────────────────────────────────
         OutlinedTextField(
             value         = searchQuery,
@@ -134,42 +145,54 @@ fun AppsTab(
         HorizontalDivider()
 
         // ── App list ──────────────────────────────────────────────────────
-        if (installedApps.isEmpty()) {
-            Column(
-                modifier            = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text  = "Loading apps... This may take a few seconds.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(vertical = 4.dp),
-            ) {
-                items(
-                    items = displayedApps,
-                    key   = { it.packageName },
-                ) { app ->
-                    AppRow(
-                        app           = app,
-                        isBypassed    = app.packageName in bypassedApps,
-                        onToggle      = { checked ->
-                            viewModel.setAppBypassed(app.packageName, checked)
-                            coroutineScope.launch {
-                                snackbarHostState.currentSnackbarData?.dismiss()
-                                snackbarHostState.showSnackbar(
-                                    message = if (checked) "${app.label} added to bypass list" else "${app.label} removed from bypass list",
-                                    duration = SnackbarDuration.Short
-                                )
-                            }
-                        },
+        Column(modifier = Modifier.weight(1f)) {
+            if (installedApps.isEmpty()) {
+                Column(
+                    modifier            = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text  = "Loading apps... This may take a few seconds.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(vertical = 4.dp),
+                ) {
+                    items(
+                        items = displayedApps,
+                        key   = { it.packageName },
+                    ) { app ->
+                        AppRow(
+                            app           = app,
+                            isBypassed    = app.packageName in bypassedApps,
+                            onToggle      = { checked ->
+                                viewModel.setAppBypassed(app.packageName, checked)
+                                coroutineScope.launch {
+                                    snackbarHostState.currentSnackbarData?.dismiss()
+                                    snackbarHostState.showSnackbar(
+                                        message = if (checked) "${app.label} added to bypass list" else "${app.label} removed from bypass list",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                }
+                            },
+                        )
+                    }
+                }
             }
+        }
+
+        // ── Reset ─────────────────────────────────────────────────────────
+        OutlinedButton(
+            onClick   = { viewModel.resetBypassedAppsToDefaults() },
+            modifier  = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Text("Reset to defaults")
         }
     }
 }

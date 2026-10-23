@@ -118,7 +118,7 @@ class MainActivity : ComponentActivity() {
                     },
                     title = {
                         Text(
-                            text = "Welcome to Just Block!",
+                            text = "Welcome!",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -126,27 +126,30 @@ class MainActivity : ComponentActivity() {
                     text = {
                         Column {
                             Text(
-                                "To provide you with a distraction-free experience, Just Block requires two permissions:",
+                                "This app requires two permissions:",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             
                             Text(
-                                "• Notification Permission:\nThis allows us to show a persistent notification while the blocker is active. This ensures the Android system doesn't kill the blocker in the background and lets you quickly manage it.",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            Text(
-                                "• VPN Permission:\nWe use a local VPN to filter your network traffic and block selected domains directly on your device. Your data never leaves your phone and is not sent to any external server.",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            Text(
-                                "Please grant these permissions on the next screens to start using Just Block.",
+                                "Notification Permission",
                                 style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "This notifies you when the blocker is active and more importantly, ensures that you phone doesn't kill the app in the background.",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            Text(
+                                "VPN Permission",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "We use a local VPN to filter your network traffic and block selected domains.",
+                                style = MaterialTheme.typography.bodyMedium
                             )
                             
                             Spacer(modifier = Modifier.height(8.dp))
@@ -208,6 +211,7 @@ class MainActivity : ComponentActivity() {
                             viewModel  = viewModel,
                             themeMode = themeMode,
                             onThemeModeChange = { viewModel.setThemeMode(it) },
+                            onAddRule = { selectedTab = 1 },
                             onCloseApp = ::stopVpnAndClose,
                             modifier   = Modifier.padding(padding),
                         )

@@ -438,6 +438,17 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Restores the bypass list to [UserPreferences.DEFAULT_BYPASSED_APPS],
+     * clearing any user-added bypasses and re-enabling the system defaults.
+     */
+    fun resetBypassedAppsToDefaults() {
+        viewModelScope.launch {
+            prefs.setBypassedApps(UserPreferences.DEFAULT_BYPASSED_APPS)
+            flushDnsCache()
+        }
+    }
+
     private fun flushDnsCache() {
         viewModelScope.launch {
             // Read the persisted setting rather than the isVpnEnabled StateFlow

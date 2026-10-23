@@ -1,13 +1,17 @@
 #[path = "../quic.rs"]
 pub mod quic;
 
-use quic::DoqEndpoint;
+use quic::QuicEndpoint;
 
 #[tokio::main]
 async fn main() {
     println!("Connecting to DoQ...");
-    let endpoint = DoqEndpoint::new_v4().unwrap();
-    let doq = endpoint.connect(&"94.140.14.14".parse().unwrap(), "dns.adguard-dns.com").await.unwrap();
+    let endpoint = QuicEndpoint::new_doq_v4().unwrap();
+    let conn = endpoint
+        .connect(&"94.140.14.14".parse().unwrap(), "dns.adguard-dns.com")
+        .await
+        .unwrap();
+    let doq = quic::DoqClient::new(conn);
     println!("Connected! Sending query...");
 
     // Query for example.com A record
@@ -18,10 +22,8 @@ async fn main() {
         0x00, 0x00, // Answer RRs
         0x00, 0x00, // Authority RRs
         0x00, 0x00, // Additional RRs
-        0x07, b'e', b'x', b'a', b'm', b'p', b'l', b'e',
-        0x03, b'c', b'o', b'm',
-        0x00,
-        0x00, 0x01, // Type A
+        0x07, b'e', b'x', b'a', b'm', b'p', b'l', b'e', 0x03, b'c', b'o', b'm', 0x00, 0x00,
+        0x01, // Type A
         0x00, 0x01, // Class IN
     ];
 

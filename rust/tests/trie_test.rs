@@ -15,7 +15,9 @@ fn to_trie_key(name: &[u8]) -> Vec<u8> {
     let mut idx = 0;
     while idx < name.len() {
         let len = name[idx] as usize;
-        if len == 0 { break; }
+        if len == 0 {
+            break;
+        }
         labels.push((idx, 1 + len));
         idx += 1 + len;
     }
@@ -86,8 +88,14 @@ fn test_no_false_positive() {
     println!("Lookup key for 'notexample.com': {:?}", lookup);
 
     let result = trie.get_ancestor_value(&lookup);
-    println!("get_ancestor_value false positive test: {:?}", result.is_some());
-    assert!(result.is_none(), "notexample.com should NOT match example.com");
+    println!(
+        "get_ancestor_value false positive test: {:?}",
+        result.is_some()
+    );
+    assert!(
+        result.is_none(),
+        "notexample.com should NOT match example.com"
+    );
 }
 
 #[test]
@@ -99,6 +107,9 @@ fn test_no_cross_domain() {
     let lookup = to_trie_key(&qname);
 
     let result = trie.get_ancestor_value(&lookup);
-    println!("get_ancestor_value cross-domain test: {:?}", result.is_some());
+    println!(
+        "get_ancestor_value cross-domain test: {:?}",
+        result.is_some()
+    );
     assert!(result.is_none(), "google.com should NOT match example.com");
 }

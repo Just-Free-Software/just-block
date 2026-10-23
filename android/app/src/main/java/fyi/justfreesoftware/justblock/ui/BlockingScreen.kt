@@ -1,5 +1,6 @@
 package fyi.justfreesoftware.justblock.ui
 
+import fyi.justfreesoftware.justblock.ui.theme.HeaderTextStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,10 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.Button
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -33,6 +37,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 
@@ -60,9 +68,9 @@ fun BlockingScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = """
-                            Manual — Websites you add here are blocked right away, no matter which blocklists you use. You can pause blocking for a site or remove it entirely.
+                            Website — Websites you add here are blocked right away, no matter which blocklists you use. You can pause blocking for a site or remove it entirely.
 
-                            Blocklists — We use AdGuard's DNS servers, which blocks most ads by default. You can also add your own blocklist URLs here.
+                            Blocklists — We use AdGuard's DNS servers (with Cloudflare and Google as automatic fallbacks), which blocks most ads by default. You can also add your own blocklist URLs here.
                         """.trimIndent(),
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -94,7 +102,7 @@ fun BlockingScreen(
             ) {
                 Text(
                     text  = "Blocking",
-                    style = MaterialTheme.typography.displayLarge,
+                    style = HeaderTextStyle,
                 )
                 Spacer(Modifier.weight(1f))
                 IconButton(
@@ -117,7 +125,7 @@ fun BlockingScreen(
                     onClick  = { selectedTab = 0 },
                     text = {
                         Text(
-                            "Manual",
+                            "Website",
                             style = MaterialTheme.typography.labelLarge
                         )
                     },
@@ -156,6 +164,8 @@ internal fun DomainInputRow(
     modifier: Modifier = Modifier,
 ) {
     var text by remember { mutableStateOf("") }
+    var isFocused by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -166,18 +176,36 @@ internal fun DomainInputRow(
             onValueChange = { text = it },
             placeholder   = { Text(placeholder) },
             singleLine    = true,
-            modifier      = Modifier.weight(1f),
+            shape         = RoundedCornerShape(12.dp),
+            keyboardOptions  = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions  = KeyboardActions(
+                onDone = {
+                    if (text.isNotBlank()) {
+                        onAdd(text.trim())
+                        text = ""
+                    }
+                }
+            ),
+            modifier      = Modifier
+                .weight(1f)
+                .focusRequester(focusRequester)
+                .onFocusChanged { isFocused = it.isFocused },
         )
         Spacer(Modifier.width(8.dp))
-        Button(
+        FilledIconButton(
             onClick = {
-                if (text.isNotBlank()) {
+                if (!isFocused) {
+                    focusRequester.requestFocus()
+                } else if (text.isNotBlank()) {
                     onAdd(text.trim())
                     text = ""
                 }
             },
         ) {
-            Text("Add")
+            Icon(
+                Icons.Default.Add,
+                contentDescription = "Add",
+            )
         }
     }
 }

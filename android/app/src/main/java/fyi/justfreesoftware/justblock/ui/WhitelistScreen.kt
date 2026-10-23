@@ -1,5 +1,6 @@
 package fyi.justfreesoftware.justblock.ui
 
+import fyi.justfreesoftware.justblock.ui.theme.HeaderTextStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,7 +60,7 @@ fun WhitelistScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = """
-                            URLs — Whitelisted domains are never blocked, no matter which blocklist they appear in. Paste a full URL or just a domain; the domain part is what gets whitelisted.
+                            Website — Whitelisted domains are never blocked, no matter which blocklist they appear in. Paste a full URL or just a domain; the domain part is what gets whitelisted.
 
                             Apps — Selected apps bypass the VPN entirely and use your normal connection. All other apps will have their traffic routed through the VPN to be filtered.
                         """.trimIndent(),
@@ -94,7 +95,7 @@ fun WhitelistScreen(
             ) {
                 Text(
                     text  = "Whitelist",
-                    style = MaterialTheme.typography.displayLarge,
+                    style = HeaderTextStyle,
                 )
                 Spacer(Modifier.weight(1f))
                 IconButton(
@@ -117,7 +118,7 @@ fun WhitelistScreen(
                     onClick  = { selectedTab = 0 },
                     text = {
                         Text(
-                            "URLs",
+                            "Website",
                             style = MaterialTheme.typography.labelLarge
                         )
                     },

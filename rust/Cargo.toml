@@ -16,14 +16,18 @@ path = "src/uniffi-bindgen.rs"
 dns-trace = []
 
 [dependencies]
-uniffi = { version = "0.31", features = ["tokio", "cli"] }
+uniffi = { version = "0.32", features = ["tokio", "cli"] }
 tokio = { version = "1", features = ["full"] }
 quinn = "0.11"
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
-webpki-roots = "0.26"
+webpki-roots = "1.0"
 tokio-util = { version = "0.7", features = ["rt"] }
-etherparse = "0.20.1"
-radix_trie = "0.2"
+etherparse = "0.21.0"
+radix_trie = "0.3"
 libc = "0.2"
 domain = "0.12"
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
+bytes = "1.12.1"
+http = "1.5.0"
 

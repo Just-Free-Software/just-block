@@ -2,16 +2,18 @@ uniffi::setup_scaffolding!();
 
 mod proxy;
 
+mod doh3;
 mod quic;
 #[cfg(test)]
 mod wire_test_util;
 
+use doh3::Doh3Client;
 use etherparse::{SlicedPacket, TransportSlice};
 use proxy::{
     build_null_response, build_servfail_response, create_forwarded_response, create_tcp_rst,
     parse_query,
 };
-use quic::{DoqClient, DoqEndpoint};
+use quic::{DoqClient, QuicEndpoint};
 use radix_trie::Trie;
 use std::collections::HashMap;
 use std::os::fd::RawFd;
@@ -35,8 +37,17 @@ fn get_runtime() -> &'static Runtime {
 }
 
 /// Hard upper bound on how long any single forwarded DNS query may take
-/// (connection establishment + query + response delivery), end to end.
+/// (all upstream attempts end to end, dial + query + response delivery).
 const QUERY_DEADLINE: Duration = Duration::from_secs(3);
+
+/// Per-upstream budget for establishing a connection, so a hanging primary
+/// still leaves time in [QUERY_DEADLINE] for backup upstreams to answer.
+const DIAL_BUDGET: Duration = Duration::from_secs(1);
+
+/// After a dial or query failure, an upstream is skipped for this long so
+/// queries fail over to the next upstream immediately instead of burning
+/// the dial budget on a known-dead server.
+const FAILED_UPSTREAM_BACKOFF: Duration = Duration::from_secs(30);
 
 /// Tracks the currently-running proxy task. `generation` disambiguates an old
 /// task's cleanup from a new task's registration so a stale exit can never
@@ -47,19 +58,24 @@ struct RunSlot {
     token: Option<CancellationToken>,
 }
 
+/// A backup upstream reachable over DoH3 (DNS over HTTP/3, RFC 8484 body
+/// over an HTTP/3 POST). Cloudflare and Google both offer this but not DoQ.
+#[derive(uniffi::Record)]
+pub struct Doh3Backup {
+    pub addr_v4: Option<String>,
+    pub addr_v6: Option<String>,
+    pub sni_hostname: String,
+    pub path: String,
+}
+
 #[derive(uniffi::Object)]
 pub struct DnsProxy {
     tun_fd: i32,
-    quic_fd_v4: Option<i32>,
-    quic_fd_v6: Option<i32>,
-    upstream_v4: Option<std::net::IpAddr>,
-    upstream_v6: Option<std::net::IpAddr>,
-    sni_hostname: String,
+    quic_fds: Vec<i32>,
     blocklist: Arc<RwLock<Trie<Vec<u8>, ()>>>,
     pauses: Arc<RwLock<Trie<Vec<u8>, i64>>>,
     run_slot: Arc<Mutex<RunSlot>>,
-    doq_endpoint_v4: Option<Arc<DoqEndpoint>>,
-    doq_endpoint_v6: Option<Arc<DoqEndpoint>>,
+    upstreams: Vec<Arc<Upstream>>,
 }
 
 #[uniffi::export]
@@ -70,6 +86,7 @@ impl DnsProxy {
         upstream_v4: Option<String>,
         upstream_v6: Option<String>,
         sni_hostname: String,
+        doh3_backups: Vec<Doh3Backup>,
     ) -> Arc<Self> {
         let _guard = get_runtime().enter();
         let upstream_v4 = upstream_v4.and_then(|s| match s.parse::<std::net::IpAddr>() {
@@ -86,37 +103,90 @@ impl DnsProxy {
                 None
             }
         });
-        let doq_endpoint_v4 = upstream_v4
-            .as_ref()
-            .map(|_| Arc::new(DoqEndpoint::new_v4().expect("Failed to create DoQ IPv4 endpoint")));
-        let quic_fd_v4 = doq_endpoint_v4.as_ref().map(|e| e.get_socket_fd());
 
-        let doq_endpoint_v6 = upstream_v6
-            .as_ref()
-            .map(|_| Arc::new(DoqEndpoint::new_v6().expect("Failed to create DoQ IPv6 endpoint")));
-        let quic_fd_v6 = doq_endpoint_v6.as_ref().map(|e| e.get_socket_fd());
+        let mut upstreams: Vec<Arc<Upstream>> = Vec::new();
+        let mut quic_fds: Vec<i32> = Vec::new();
+
+        // Primary upstream: DoQ (RFC 9250).
+        if upstream_v4.is_some() || upstream_v6.is_some() {
+            let endpoint_v4 = upstream_v4.as_ref().map(|_| {
+                Arc::new(QuicEndpoint::new_doq_v4().expect("Failed to create DoQ IPv4 endpoint"))
+            });
+            if let Some(ep) = &endpoint_v4 {
+                quic_fds.push(ep.get_socket_fd());
+            }
+            let endpoint_v6 = upstream_v6.as_ref().map(|_| {
+                Arc::new(QuicEndpoint::new_doq_v6().expect("Failed to create DoQ IPv6 endpoint"))
+            });
+            if let Some(ep) = &endpoint_v6 {
+                quic_fds.push(ep.get_socket_fd());
+            }
+            upstreams.push(Arc::new(Upstream {
+                kind: UpstreamKind::Doq {
+                    endpoint_v4,
+                    endpoint_v6,
+                    ip_v4: upstream_v4,
+                    ip_v6: upstream_v6,
+                },
+                sni: sni_hostname,
+                shared: Arc::new(UpstreamShared::default()),
+            }));
+        }
+
+        // Backup upstreams: DoH3 over a shared h3-ALPN endpoint pair.
+        if !doh3_backups.is_empty() {
+            let any_v4 = doh3_backups.iter().any(|b| parse_ip(&b.addr_v4).is_some());
+            let any_v6 = doh3_backups.iter().any(|b| parse_ip(&b.addr_v6).is_some());
+            let endpoint_v4 = any_v4.then(|| {
+                Arc::new(QuicEndpoint::new_h3_v4().expect("Failed to create h3 IPv4 endpoint"))
+            });
+            if let Some(ep) = &endpoint_v4 {
+                quic_fds.push(ep.get_socket_fd());
+            }
+            let endpoint_v6 = any_v6.then(|| {
+                Arc::new(QuicEndpoint::new_h3_v6().expect("Failed to create h3 IPv6 endpoint"))
+            });
+            if let Some(ep) = &endpoint_v6 {
+                quic_fds.push(ep.get_socket_fd());
+            }
+            for backup in doh3_backups {
+                let ip_v4 = parse_ip(&backup.addr_v4);
+                let ip_v6 = parse_ip(&backup.addr_v6);
+                if ip_v4.is_none() && ip_v6.is_none() {
+                    log_trace!(&format!(
+                        "skipping DoH3 backup {:?} — no usable address",
+                        backup.sni_hostname
+                    ));
+                    continue;
+                }
+                upstreams.push(Arc::new(Upstream {
+                    kind: UpstreamKind::Doh3 {
+                        endpoint_v4: endpoint_v4.clone(),
+                        endpoint_v6: endpoint_v6.clone(),
+                        ip_v4,
+                        ip_v6,
+                        path: backup.path,
+                    },
+                    sni: backup.sni_hostname,
+                    shared: Arc::new(UpstreamShared::default()),
+                }));
+            }
+        }
 
         Arc::new(Self {
             tun_fd,
-            quic_fd_v4,
-            quic_fd_v6,
-            upstream_v4,
-            upstream_v6,
-            sni_hostname,
+            quic_fds,
             blocklist: Arc::new(RwLock::new(Trie::new())),
             pauses: Arc::new(RwLock::new(Trie::new())),
             run_slot: Arc::new(Mutex::new(RunSlot::default())),
-            doq_endpoint_v4,
-            doq_endpoint_v6,
+            upstreams,
         })
     }
 
-    pub fn get_quic_fd_v4(&self) -> Option<i32> {
-        self.quic_fd_v4
-    }
-
-    pub fn get_quic_fd_v6(&self) -> Option<i32> {
-        self.quic_fd_v6
+    /// All QUIC socket fds owned by this proxy (DoQ + DoH3). Every one must
+    /// be protected from the VPN tunnel by the Android side before use.
+    pub fn get_quic_fds(&self) -> Vec<i32> {
+        self.quic_fds.clone()
     }
 
     /// Cancels the running proxy task, if any. Idempotent: calling stop()
@@ -148,28 +218,13 @@ impl DnsProxy {
         };
 
         let tun_fd = self.tun_fd;
-        let upstream_v4 = self.upstream_v4.clone();
-        let upstream_v6 = self.upstream_v6.clone();
-        let sni_hostname = self.sni_hostname.clone();
         let blocklist = self.blocklist.clone();
         let pauses = self.pauses.clone();
-        let doq_endpoint_v4 = self.doq_endpoint_v4.clone();
-        let doq_endpoint_v6 = self.doq_endpoint_v6.clone();
+        let upstreams = self.upstreams.clone();
         let run_slot = self.run_slot.clone();
 
         get_runtime().spawn(async move {
-            run_proxy(
-                tun_fd,
-                upstream_v4,
-                upstream_v6,
-                sni_hostname,
-                blocklist,
-                pauses,
-                cancel_token,
-                doq_endpoint_v4,
-                doq_endpoint_v6,
-            )
-            .await;
+            run_proxy(tun_fd, upstreams, blocklist, pauses, cancel_token).await;
             // Clear the slot on exit (both natural exit and cancellation) so
             // a subsequent start() works. The generation check ensures a
             // stale task never clears a newer run's token.
@@ -311,7 +366,10 @@ mod android_log {
 }
 
 /// Best-effort dotted qname from a raw DNS payload, for debug logging only.
-#[cfg_attr(not(all(target_os = "android", feature = "dns-trace")), allow(dead_code))]
+#[cfg_attr(
+    not(all(target_os = "android", feature = "dns-trace")),
+    allow(dead_code)
+)]
 fn qname_str(payload: &[u8]) -> String {
     domain::base::message::Message::from_slice(payload)
         .ok()
@@ -321,29 +379,64 @@ fn qname_str(payload: &[u8]) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// DoQ connection state
+// Upstream pool & connection state
 // ---------------------------------------------------------------------------
+
+/// One established DNS session with an upstream: either DoQ or DoH3.
+enum DnsSession {
+    Doq(DoqClient),
+    Doh3(Doh3Client),
+}
+
+impl DnsSession {
+    fn is_alive(&self) -> bool {
+        match self {
+            DnsSession::Doq(c) => c.is_alive(),
+            DnsSession::Doh3(c) => c.is_alive(),
+        }
+    }
+
+    async fn send_query(
+        &self,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+        match self {
+            DnsSession::Doq(c) => c.send_query(payload).await,
+            DnsSession::Doh3(c) => c.send_query(payload).await,
+        }
+    }
+}
 
 /// Shared upstream-connection state for one proxy run.
 ///
 /// `Connecting` makes connection establishment explicit: concurrent queries
 /// wait on `changed` (no polling loop, no timestamp-as-lock), and exactly one
 /// task performs the dial. Everyone else is woken when it succeeds or fails.
+/// `backoff_until` suppresses dialing for FAILED_UPSTREAM_BACKOFF after a
+/// failed attempt so a known-dead upstream doesn't burn the dial budget.
 enum ConnState {
     /// No connection; the next query that needs one dials.
     Idle,
     /// A connection attempt is in flight.
     Connecting,
     /// An established, presumably-alive connection.
-    Connected(Arc<DoqClient>),
+    Connected(Arc<DnsSession>),
 }
 
-struct DoqShared {
+impl Default for ConnState {
+    fn default() -> Self {
+        ConnState::Idle
+    }
+}
+
+#[derive(Default)]
+struct UpstreamShared {
     state: TokioMutex<ConnState>,
     changed: Notify,
+    backoff_until: TokioMutex<Option<tokio::time::Instant>>,
 }
 
-impl DoqShared {
+impl UpstreamShared {
     /// Mark the current connection dead so the next query re-dials.
     /// Never interrupts an in-flight dial.
     async fn invalidate(&self) {
@@ -353,26 +446,88 @@ impl DoqShared {
         }
         self.changed.notify_waiters();
     }
+
+    /// True when this upstream failed recently and should be skipped.
+    async fn in_backoff(&self, now: tokio::time::Instant) -> bool {
+        let until = self.backoff_until.lock().await;
+        matches!(*until, Some(t) if now < t)
+    }
+
+    async fn mark_failed(&self, now: tokio::time::Instant) {
+        *self.backoff_until.lock().await = Some(now + FAILED_UPSTREAM_BACKOFF);
+    }
 }
 
-/// Returns a live DoQ client, dialing (or waiting for an in-flight dial) as
-/// needed. Returns `None` if no client is available by `deadline`.
-async fn get_doq_client(
-    shared: &DoqShared,
-    endpoint_v4: &Option<Arc<DoqEndpoint>>,
-    endpoint_v6: &Option<Arc<DoqEndpoint>>,
-    upstream_v4: &Option<std::net::IpAddr>,
-    upstream_v6: &Option<std::net::IpAddr>,
-    sni: &str,
+/// How to reach one upstream: transport kind plus its endpoints/addresses.
+enum UpstreamKind {
+    Doq {
+        endpoint_v4: Option<Arc<QuicEndpoint>>,
+        endpoint_v6: Option<Arc<QuicEndpoint>>,
+        ip_v4: Option<std::net::IpAddr>,
+        ip_v6: Option<std::net::IpAddr>,
+    },
+    Doh3 {
+        endpoint_v4: Option<Arc<QuicEndpoint>>,
+        endpoint_v6: Option<Arc<QuicEndpoint>>,
+        ip_v4: Option<std::net::IpAddr>,
+        ip_v6: Option<std::net::IpAddr>,
+        path: String,
+    },
+}
+
+struct Upstream {
+    kind: UpstreamKind,
+    sni: String,
+    shared: Arc<UpstreamShared>,
+}
+
+impl Upstream {
+    async fn connect(&self) -> Result<DnsSession, Box<dyn std::error::Error + Send + Sync>> {
+        let (endpoint_v4, endpoint_v6, ip_v4, ip_v6) = match &self.kind {
+            UpstreamKind::Doq {
+                endpoint_v4,
+                endpoint_v6,
+                ip_v4,
+                ip_v6,
+            } => (endpoint_v4, endpoint_v6, ip_v4, ip_v6),
+            UpstreamKind::Doh3 {
+                endpoint_v4,
+                endpoint_v6,
+                ip_v4,
+                ip_v6,
+                ..
+            } => (endpoint_v4, endpoint_v6, ip_v4, ip_v6),
+        };
+        let conn = dial_connection(endpoint_v4, endpoint_v6, ip_v4, ip_v6, &self.sni).await?;
+        match &self.kind {
+            UpstreamKind::Doq { .. } => Ok(DnsSession::Doq(DoqClient::new(conn))),
+            UpstreamKind::Doh3 { path, .. } => {
+                let client = Doh3Client::new(conn, self.sni.clone(), path.clone()).await?;
+                Ok(DnsSession::Doh3(client))
+            }
+        }
+    }
+}
+
+fn parse_ip(s: &Option<String>) -> Option<std::net::IpAddr> {
+    s.as_deref().and_then(|s| s.parse().ok())
+}
+
+/// Returns a live session with this upstream, dialing (or waiting for an
+/// in-flight dial) as needed. Returns `None` if no session is available by
+/// `deadline`.
+async fn get_session(
+    upstream: &Upstream,
     deadline: tokio::time::Instant,
-) -> Option<Arc<DoqClient>> {
+) -> Option<Arc<DnsSession>> {
+    let shared = &upstream.shared;
     loop {
         // Register for change notification BEFORE inspecting state so a
         // state transition between inspection and waiting cannot be missed.
         let notified = shared.changed.notified();
 
         enum Step {
-            Ready(Arc<DoqClient>),
+            Ready(Arc<DnsSession>),
             WaitForDial,
             Dial,
         }
@@ -405,16 +560,12 @@ async fn get_doq_client(
                     }
                 }
 
-                let result = tokio::time::timeout_at(
-                    deadline,
-                    connect_doq(endpoint_v4, endpoint_v6, upstream_v4, upstream_v6, sni),
-                )
-                .await;
+                let result = tokio::time::timeout_at(deadline, upstream.connect()).await;
 
                 let mut st = shared.state.lock().await;
                 match result {
-                    Ok(Ok(client)) => {
-                        let arc = Arc::new(client);
+                    Ok(Ok(session)) => {
+                        let arc = Arc::new(session);
                         *st = ConnState::Connected(arc.clone());
                         shared.changed.notify_waiters();
                         return Some(arc);
@@ -431,14 +582,15 @@ async fn get_doq_client(
 }
 
 /// Happy-Eyeballs dial: prefer IPv6, fall back to IPv4 after 50ms if both
-/// upstreams are configured; otherwise dial whichever exists.
-async fn connect_doq(
-    endpoint_v4: &Option<Arc<DoqEndpoint>>,
-    endpoint_v6: &Option<Arc<DoqEndpoint>>,
+/// families are configured; otherwise dial whichever exists. Returns the
+/// raw QUIC connection; the caller wraps it in a DoQ or DoH3 session.
+async fn dial_connection(
+    endpoint_v4: &Option<Arc<QuicEndpoint>>,
+    endpoint_v6: &Option<Arc<QuicEndpoint>>,
     upstream_v4: &Option<std::net::IpAddr>,
     upstream_v6: &Option<std::net::IpAddr>,
     sni: &str,
-) -> Result<DoqClient, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<quinn::Connection, Box<dyn std::error::Error + Send + Sync>> {
     let fut_v6 = async {
         match (endpoint_v6, upstream_v6) {
             (Some(ep), Some(ip)) => ep.connect(ip, sni).await,
@@ -527,14 +679,10 @@ async fn write_tun(fd: &AsyncFd<RawFd>, packet: &[u8]) -> std::io::Result<()> {
 
 async fn run_proxy(
     tun_fd: i32,
-    upstream_v4: Option<std::net::IpAddr>,
-    upstream_v6: Option<std::net::IpAddr>,
-    sni_hostname: String,
+    upstreams: Vec<Arc<Upstream>>,
     blocklist: Arc<RwLock<Trie<Vec<u8>, ()>>>,
     pauses: Arc<RwLock<Trie<Vec<u8>, i64>>>,
     cancel_token: CancellationToken,
-    doq_endpoint_v4: Option<Arc<DoqEndpoint>>,
-    doq_endpoint_v6: Option<Arc<DoqEndpoint>>,
 ) {
     log_trace!("run_proxy started");
 
@@ -564,17 +712,22 @@ async fn run_proxy(
     let mut buf = vec![0u8; 65536];
     let mut async_fd_opt = None;
     for _ in 0..500 {
-        match AsyncFd::new(tun_fd) {
+        // SAFETY: `tun_fd` is a valid, open file descriptor obtained from the
+        // Android VpnService, it is set nonblocking above, and the Android side
+        // does not close or replace it for the lifetime of this proxy task.
+        match unsafe { AsyncFd::register(tun_fd) } {
             Ok(fd) => {
                 async_fd_opt = Some(fd);
                 break;
             }
-            Err(e) if e.raw_os_error() == Some(libc::EEXIST) => {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-            Err(_e) => {
-                log_trace!(&format!("AsyncFd::new failed: {}", _e));
-                return;
+            Err(e) => {
+                let (_, io_err) = e.into_parts();
+                if io_err.raw_os_error() == Some(libc::EEXIST) {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                } else {
+                    log_trace!(&format!("AsyncFd::register failed: {}", io_err));
+                    return;
+                }
             }
         }
     }
@@ -588,10 +741,6 @@ async fn run_proxy(
     };
 
     let semaphore = Arc::new(tokio::sync::Semaphore::new(100));
-    let doq_shared = Arc::new(DoqShared {
-        state: TokioMutex::new(ConnState::Idle),
-        changed: Notify::new(),
-    });
 
     // Bounded response channel. Query tasks use send().await (bounded
     // backpressure; the channel closes when the loop exits, so sends cannot
@@ -662,16 +811,11 @@ async fn run_proxy(
                                         }
                                     }
                                 } else {
-                                    // Forward via DoQ (spawned task owns all it needs)
-                                    log_trace!(&format!("FORWARD {} via DoQ", qname_str(payload)));
+                                    // Forward upstream (spawned task owns all it needs)
+                                    log_trace!(&format!("FORWARD {}", qname_str(payload)));
                                     match semaphore.clone().try_acquire_owned() {
                                         Ok(permit) => {
-                                            let doq_shared = doq_shared.clone();
-                                        let doq_endpoint_v4 = doq_endpoint_v4.clone();
-                                        let doq_endpoint_v6 = doq_endpoint_v6.clone();
-                                        let upstream_v4_clone = upstream_v4.clone();
-                                        let upstream_v6_clone = upstream_v6.clone();
-                                        let sni_clone = sni_hostname.clone();
+                                        let upstreams = upstreams.clone();
                                         let payload_vec = payload.to_vec();
                                         let req_ip = pkt.to_vec();
                                         let tx_clone = tx.clone();
@@ -681,12 +825,7 @@ async fn run_proxy(
                                             tokio::select! {
                                                 _ = task_token.cancelled() => {}
                                                 _ = forward_query(
-                                                    &doq_shared,
-                                                    &doq_endpoint_v4,
-                                                    &doq_endpoint_v6,
-                                                    &upstream_v4_clone,
-                                                    &upstream_v6_clone,
-                                                    &sni_clone,
+                                                    &upstreams,
                                                     &payload_vec,
                                                     &req_ip,
                                                     &tx_clone,
@@ -748,59 +887,70 @@ async fn run_proxy(
     } // end loop
 }
 
-/// Forwards one DNS query upstream via DoQ and delivers the response on
-/// `tx`. Bounded by a single hard deadline covering dial + query + send,
-/// so a request can never exceed QUERY_DEADLINE end to end.
+/// Forwards one DNS query upstream and delivers the response on `tx`.
+///
+/// Upstreams are tried in order (primary first, then backups). Each
+/// connection attempt is capped at [DIAL_BUDGET] so a hanging upstream
+/// still leaves time for the next; the whole chain is bounded by
+/// [QUERY_DEADLINE]. An upstream whose dial or query fails is put on
+/// [FAILED_UPSTREAM_BACKOFF] so subsequent queries fail over immediately.
 async fn forward_query(
-    doq_shared: &DoqShared,
-    doq_endpoint_v4: &Option<Arc<DoqEndpoint>>,
-    doq_endpoint_v6: &Option<Arc<DoqEndpoint>>,
-    upstream_v4: &Option<std::net::IpAddr>,
-    upstream_v6: &Option<std::net::IpAddr>,
-    sni: &str,
+    upstreams: &[Arc<Upstream>],
     payload: &[u8],
     req_ip: &[u8],
     tx: &mpsc::Sender<Vec<u8>>,
 ) {
     let deadline = tokio::time::Instant::now() + QUERY_DEADLINE;
 
-    let client = match get_doq_client(
-        doq_shared,
-        doq_endpoint_v4,
-        doq_endpoint_v6,
-        upstream_v4,
-        upstream_v6,
-        sni,
-        deadline,
-    )
-    .await
-    {
-        Some(c) => c,
-        None => {
-            send_servfail(req_ip, payload, tx).await;
-            return;
+    for upstream in upstreams {
+        if upstream
+            .shared
+            .in_backoff(tokio::time::Instant::now())
+            .await
+        {
+            continue;
         }
-    };
+        // Cap the dial budget so backups get a share of the deadline.
+        let now = tokio::time::Instant::now();
+        let attempt_deadline = now
+            .checked_add(DIAL_BUDGET)
+            .filter(|d| *d < deadline)
+            .unwrap_or(deadline);
 
-    let query = client.send_query(payload);
-    match tokio::time::timeout_at(deadline, query).await {
-        Ok(Ok(resp_payload)) => {
-            if let Ok(sliced) = SlicedPacket::from_ip(req_ip) {
-                if let Some(resp) = create_forwarded_response(&sliced, payload, &resp_payload) {
-                    // Bounded by the surrounding cancel-token select; fails
-                    // immediately if the proxy loop has exited (rx dropped).
-                    let _ = tx.send(resp).await;
+        let session = match get_session(upstream, attempt_deadline).await {
+            Some(c) => c,
+            None => {
+                upstream.shared.mark_failed(now).await;
+                continue;
+            }
+        };
+
+        match tokio::time::timeout_at(deadline, session.send_query(payload)).await {
+            Ok(Ok(resp_payload)) => {
+                if let Ok(sliced) = SlicedPacket::from_ip(req_ip) {
+                    if let Some(resp) = create_forwarded_response(&sliced, payload, &resp_payload) {
+                        // Bounded by the surrounding cancel-token select; fails
+                        // immediately if the proxy loop has exited (rx dropped).
+                        let _ = tx.send(resp).await;
+                    }
                 }
+                return;
+            }
+            _ => {
+                // Query failed or timed out: drop the connection so the next
+                // query re-dials, back off this upstream, and try the next one.
+                upstream.shared.invalidate().await;
+                upstream
+                    .shared
+                    .mark_failed(tokio::time::Instant::now())
+                    .await;
             }
         }
-        _ => {
-            // Query failed or timed out: drop the connection so the next
-            // query re-dials, and answer SERVFAIL so the client isn't left
-            // waiting on its own timeout.
-            doq_shared.invalidate().await;
-            send_servfail(req_ip, payload, tx).await;
-        }
     }
+
+    // Every upstream failed (or was in backoff): answer SERVFAIL so the
+    // client isn't left waiting on its own timeout.
+    send_servfail(req_ip, payload, tx).await;
 }
 
 /// Builds a SERVFAIL answer, wraps it in IP/UDP headers from the original
@@ -829,10 +979,7 @@ mod tests {
     }
 
     fn trie_from(pauses: &[(&str, i64)]) -> Trie<Vec<u8>, i64> {
-        let map: HashMap<String, i64> = pauses
-            .iter()
-            .map(|(d, e)| (d.to_string(), *e))
-            .collect();
+        let map: HashMap<String, i64> = pauses.iter().map(|(d, e)| (d.to_string(), *e)).collect();
         pauses_trie(map)
     }
 
@@ -887,19 +1034,181 @@ mod tests {
         // A 64-byte label exceeds the DNS label limit and must be dropped,
         // not panic.
         let long_label = "a".repeat(64);
-        let map: HashMap<String, i64> =
-            [(format!("{long_label}.com"), now_epoch_ms() - 1)]
-                .into_iter()
-                .collect();
+        let map: HashMap<String, i64> = [(format!("{long_label}.com"), now_epoch_ms() - 1)]
+            .into_iter()
+            .collect();
         let trie = pauses_trie(map);
         assert!(!pause_lazily_expired(&trie, &key("example.com")));
     }
 
     #[test]
     fn pauses_trie_uses_lowercase_keys() {
-        let map: HashMap<String, i64> =
-            [("EXAMPLE.com".to_string(), now_epoch_ms() - 1)].into_iter().collect();
+        let map: HashMap<String, i64> = [("EXAMPLE.com".to_string(), now_epoch_ms() - 1)]
+            .into_iter()
+            .collect();
         let trie = pauses_trie(map);
         assert!(pause_lazily_expired(&trie, &key("example.com")));
+    }
+}
+
+/// Failover integration tests.
+///
+/// The two network tests (marked `#[ignore]`) dial real upstreams and must
+/// be run explicitly with `cargo test -- --ignored`. They use 192.0.2.1
+/// (TEST-NET-1, RFC 5737 — never routable) as a guaranteed-dead primary.
+#[cfg(test)]
+mod failover_tests {
+    use super::*;
+    use crate::wire_test_util::make_query;
+    use domain::base::iana::Rcode;
+
+    /// Wraps a DNS payload in the IP/UDP header shape the TUN read loop
+    /// produces (client 10.0.0.2:33333 → fake DNS 10.0.0.1:53).
+    fn wrap_query(payload: &[u8]) -> Vec<u8> {
+        let mut packet = Vec::new();
+        etherparse::PacketBuilder::ipv4(
+            "10.0.0.2".parse::<std::net::Ipv4Addr>().unwrap().octets(),
+            "10.0.0.1".parse::<std::net::Ipv4Addr>().unwrap().octets(),
+            64,
+        )
+        .udp(33333, 53)
+        .write(&mut packet, payload)
+        .unwrap();
+        packet
+    }
+
+    fn unwrap_response(packet: &[u8]) -> domain::base::message::Message<Vec<u8>> {
+        let sliced = SlicedPacket::from_ip(packet).expect("valid IP packet");
+        match sliced.transport.as_ref() {
+            Some(TransportSlice::Udp(udp)) => {
+                domain::base::message::Message::from_octets(udp.payload().to_vec()).unwrap()
+            }
+            _ => panic!("expected UDP response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn backoff_window_is_bounded() {
+        let shared = UpstreamShared::default();
+        let now = tokio::time::Instant::now();
+        assert!(!shared.in_backoff(now).await);
+        shared.mark_failed(now).await;
+        assert!(shared.in_backoff(now).await);
+        assert!(
+            shared
+                .in_backoff(now + FAILED_UPSTREAM_BACKOFF - Duration::from_millis(1))
+                .await
+        );
+        // Backoff lapses at exactly FAILED_UPSTREAM_BACKOFF.
+        assert!(!shared.in_backoff(now + FAILED_UPSTREAM_BACKOFF).await);
+    }
+
+    #[tokio::test]
+    #[ignore = "network test — dials real DoH3 upstreams"]
+    async fn forward_query_fails_over_to_doh3_backup() {
+        let primary = Arc::new(Upstream {
+            kind: UpstreamKind::Doq {
+                endpoint_v4: Some(Arc::new(QuicEndpoint::new_doq_v4().unwrap())),
+                endpoint_v6: None,
+                ip_v4: Some("192.0.2.1".parse().unwrap()),
+                ip_v6: None,
+            },
+            sni: "dns.adguard-dns.com".to_string(),
+            shared: Arc::new(UpstreamShared::default()),
+        });
+        let backup = Arc::new(Upstream {
+            kind: UpstreamKind::Doh3 {
+                endpoint_v4: Some(Arc::new(QuicEndpoint::new_h3_v4().unwrap())),
+                endpoint_v6: None,
+                ip_v4: Some("1.1.1.1".parse().unwrap()),
+                ip_v6: None,
+                path: "/dns-query".to_string(),
+            },
+            sni: "cloudflare-dns.com".to_string(),
+            shared: Arc::new(UpstreamShared::default()),
+        });
+        let upstreams = vec![primary.clone(), backup.clone()];
+        let payload = make_query("example.com");
+        let req_ip = wrap_query(&payload);
+
+        // --- Query 1: primary is dead, backup must answer. ---
+        let (tx, mut rx) = mpsc::channel(10);
+        forward_query(&upstreams, &payload, &req_ip, &tx).await;
+        let msg = unwrap_response(&rx.recv().await.expect("a response"));
+        assert_eq!(msg.header().rcode(), Rcode::NOERROR);
+        assert!(msg.header_counts().ancount() >= 1, "no A record in answer");
+        assert_eq!(
+            msg.header().id(),
+            domain::base::message::Message::from_slice(&payload)
+                .unwrap()
+                .header()
+                .id(),
+            "transaction ID not patched to the query's"
+        );
+        // The dead primary must have been marked for backoff.
+        assert!(
+            primary.shared.in_backoff(tokio::time::Instant::now()).await,
+            "failed primary should be in backoff"
+        );
+
+        // --- Query 2: primary is skipped via backoff (no dial budget
+        // burned), backup session is cached — must answer fast. ---
+        let start = std::time::Instant::now();
+        forward_query(&upstreams, &payload, &req_ip, &tx).await;
+        let elapsed = start.elapsed();
+        let msg = unwrap_response(&rx.recv().await.expect("a response"));
+        assert_eq!(msg.header().rcode(), Rcode::NOERROR);
+        assert!(
+            elapsed < DIAL_BUDGET,
+            "second query should skip the backed-off primary (took {elapsed:?})"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "network test — dials real DoH3 upstreams"]
+    async fn forward_query_servfails_when_all_upstreams_are_dead() {
+        let upstreams = vec![
+            Arc::new(Upstream {
+                kind: UpstreamKind::Doq {
+                    endpoint_v4: Some(Arc::new(QuicEndpoint::new_doq_v4().unwrap())),
+                    endpoint_v6: None,
+                    ip_v4: Some("192.0.2.1".parse().unwrap()),
+                    ip_v6: None,
+                },
+                sni: "dns.adguard-dns.com".to_string(),
+                shared: Arc::new(UpstreamShared::default()),
+            }),
+            Arc::new(Upstream {
+                kind: UpstreamKind::Doh3 {
+                    endpoint_v4: Some(Arc::new(QuicEndpoint::new_h3_v4().unwrap())),
+                    endpoint_v6: None,
+                    ip_v4: Some("198.51.100.1".parse().unwrap()),
+                    ip_v6: None,
+                    path: "/dns-query".to_string(),
+                },
+                sni: "dns.google".to_string(),
+                shared: Arc::new(UpstreamShared::default()),
+            }),
+        ];
+        let payload = make_query("example.com");
+        let req_ip = wrap_query(&payload);
+
+        let start = std::time::Instant::now();
+        let (tx, mut rx) = mpsc::channel(10);
+        forward_query(&upstreams, &payload, &req_ip, &tx).await;
+        let elapsed = start.elapsed();
+
+        // Both upstreams are dead: the client gets a SERVFAIL, bounded by
+        // QUERY_DEADLINE rather than hanging.
+        let msg = unwrap_response(&rx.recv().await.expect("a SERVFAIL"));
+        assert_eq!(msg.header().rcode(), Rcode::SERVFAIL);
+        assert!(
+            elapsed < QUERY_DEADLINE + Duration::from_millis(500),
+            "SERVFAIL should arrive within the query deadline (took {elapsed:?})"
+        );
+        assert!(
+            elapsed >= DIAL_BUDGET,
+            "the dead primary should still consume its dial budget first (took {elapsed:?})"
+        );
     }
 }

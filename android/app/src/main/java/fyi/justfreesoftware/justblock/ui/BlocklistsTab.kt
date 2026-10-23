@@ -1,9 +1,10 @@
 package fyi.justfreesoftware.justblock.ui
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,7 +14,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -22,43 +26,48 @@ fun BlocklistsTab(
     modifier: Modifier = Modifier,
 ) {
     val customUrls by viewModel.customSourceUrls.collectAsState()
+    val focusManager = LocalFocusManager.current
 
-    LazyColumn(
-        modifier            = modifier
+    Column(
+        modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            .pointerInput(Unit) {
+                detectTapGestures { focusManager.clearFocus() }
+            }
     ) {
+        // ── Add field ─────────────────────────────────────────────────────
+        DomainInputRow(
+            placeholder = "https://example.com/hosts.txt",
+            onAdd       = { viewModel.addCustomSourceUrl(it) },
+            modifier    = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+
+        HorizontalDivider()
 
         // ── Custom sources ────────────────────────────────────────────────
-        item {
-            DomainInputRow(
-                placeholder = "https://example.com/blocklist.txt",
-                onAdd       = { viewModel.addCustomSourceUrl(it) },
-                modifier    = Modifier.padding(top = 16.dp),
-            )
-            Spacer(Modifier.height(8.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(8.dp))
-        }
-
         if (customUrls.isEmpty()) {
-            item {
+            Column(
+                modifier            = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 Text(
-                    text  = "No custom sources added yet.",
-                    style = MaterialTheme.typography.bodySmall,
+                    text  = "Link to a blocklist to block groups of websites.",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(vertical = 4.dp),
+            ) {
+                items(customUrls.toList(), key = { "url_$it" }) { url ->
+                    DomainRow(
+                        label    = url,
+                        onDelete = { viewModel.removeCustomSourceUrl(url) },
+                    )
+                }
+            }
         }
-
-        items(customUrls.toList(), key = { "url_$it" }) { url ->
-            DomainRow(
-                label    = url,
-                onDelete = { viewModel.removeCustomSourceUrl(url) },
-            )
-        }
-
-        item { Spacer(Modifier.height(16.dp)) }
     }
 }

@@ -3,7 +3,7 @@ datastore = "1.2.1"
 okhttp = "5.3.2"
 material-icons = "1.7.8"
 
-agp = "9.3.2"
+agp = "9.4.1"
 coreKtx = "1.10.1"
 junit = "4.13.2"
 junitVersion = "1.1.5"

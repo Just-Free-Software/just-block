@@ -14,6 +14,7 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import uniffi.just_block_rust.DnsProxy
+import uniffi.just_block_rust.Doh3Backup
 import fyi.justfreesoftware.justblock.MainActivity
 import fyi.justfreesoftware.justblock.ServiceLocator
 import fyi.justfreesoftware.justblock.data.BlocklistRepository
@@ -57,6 +58,16 @@ class MyVpnService : VpnService() {
 
         private const val NOTIFICATION_ID      = 1
         private const val NOTIFICATION_CHANNEL = "justblock_vpn"
+
+        /**
+         * Backup upstreams used when the primary (AdGuard DoQ) fails.
+         * Cloudflare and Google don't offer DoQ, so these are DoH3
+         * (DNS over HTTP/3, RFC 8484 over an HTTP/3 POST).
+         */
+        private val DOH3_BACKUPS = listOf(
+            Doh3Backup("1.1.1.1", "2606:4700:4700::1111", "cloudflare-dns.com", "/dns-query"),
+            Doh3Backup("8.8.8.8", "2001:4860:4860::8888", "dns.google", "/dns-query"),
+        )
     }
 
     private val userPreferences by lazy { UserPreferences(applicationContext) }
@@ -71,6 +82,7 @@ class MyVpnService : VpnService() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     private var vpnInterface: ParcelFileDescriptor? = null
+    private var dailyRefreshJob: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -166,6 +178,7 @@ class MyVpnService : VpnService() {
                     else -> Unit
                 }
 
+                startDailyRefresh()
             } catch (e: Exception) {
                 Log.e(TAG, "Error starting VPN — cleaning up", e)
                 stopVpn()
@@ -173,9 +186,29 @@ class MyVpnService : VpnService() {
         }
     }
 
+    /**
+     * Re-downloads and re-compiles all blocklists once a day while the VPN is
+     * running, so lists stay current without a manual refresh button. The
+     * loop dies with [serviceScope] when the service is destroyed; a fresh
+     * service start always re-downloads immediately anyway.
+     */
+    private fun startDailyRefresh() {
+        dailyRefreshJob?.cancel()
+        dailyRefreshJob = serviceScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(24 * 60 * 60 * 1000L)
+                if (vpnInterface == null) break
+                Log.i(TAG, "Daily blocklist refresh…")
+                blocklistRepository.loadAndCompileBlocklists()
+            }
+        }
+    }
+
     private fun stopVpn() {
         Log.i(TAG, "Stopping VPN engine…")
 
+        dailyRefreshJob?.cancel()
+        dailyRefreshJob = null
         unregisterNetworkCallback()
         dnsProxy?.stop()
         dnsProxy = null
@@ -228,24 +261,18 @@ class MyVpnService : VpnService() {
             }
 
             Log.i(TAG, "Resolved upstream ${upstreamConfig.host} to v4: $upstreamV4, v6: $upstreamV6")
-            
-            // Pass resolved IPs, but keep SNI hostname for the QUIC handshake
-            dnsProxy = DnsProxy(fd, upstreamV4, upstreamV6, upstreamConfig.sniHostname)
-            
+
+            // Pass resolved IPs, but keep SNI hostname for the QUIC handshake.
+            // Backups (Cloudflare, Google) are literal IPs — no resolution needed.
+            dnsProxy = DnsProxy(fd, upstreamV4, upstreamV6, upstreamConfig.sniHostname, DOH3_BACKUPS)
+
             val proxy = dnsProxy
             if (proxy != null) {
-                proxy.getQuicFdV4()?.let { quicFd ->
+                for (quicFd in proxy.getQuicFds()) {
                     if (protect(quicFd)) {
-                        Log.i(TAG, "Protected IPv4 QUIC socket (fd: $quicFd) from VPN tunnel")
+                        Log.i(TAG, "Protected QUIC socket (fd: $quicFd) from VPN tunnel")
                     } else {
-                        Log.e(TAG, "Failed to protect IPv4 QUIC socket (fd: $quicFd) from VPN tunnel")
-                    }
-                }
-                proxy.getQuicFdV6()?.let { quicFd ->
-                    if (protect(quicFd)) {
-                        Log.i(TAG, "Protected IPv6 QUIC socket (fd: $quicFd) from VPN tunnel")
-                    } else {
-                        Log.e(TAG, "Failed to protect IPv6 QUIC socket (fd: $quicFd) from VPN tunnel")
+                        Log.e(TAG, "Failed to protect QUIC socket (fd: $quicFd) from VPN tunnel")
                     }
                 }
             }
