@@ -160,7 +160,8 @@ fun BlockingScreen(
 @Composable
 internal fun DomainInputRow(
     placeholder: String,
-    onAdd: (String) -> Unit,
+    /** Returns false to reject the input, which then stays in the field. */
+    onAdd: (String) -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     var text by remember { mutableStateOf("") }
@@ -180,8 +181,7 @@ internal fun DomainInputRow(
             keyboardOptions  = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions  = KeyboardActions(
                 onDone = {
-                    if (text.isNotBlank()) {
-                        onAdd(text.trim())
+                    if (text.isNotBlank() && onAdd(text.trim())) {
                         text = ""
                     }
                 }
@@ -196,8 +196,7 @@ internal fun DomainInputRow(
             onClick = {
                 if (!isFocused) {
                     focusRequester.requestFocus()
-                } else if (text.isNotBlank()) {
-                    onAdd(text.trim())
+                } else if (text.isNotBlank() && onAdd(text.trim())) {
                     text = ""
                 }
             },

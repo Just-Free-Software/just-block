@@ -17,13 +17,22 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 object WhitelistUrlParser {
 
     fun extractDomain(raw: String): String? {
-        val trimmed = raw.trim()
-        if (trimmed.isBlank()) return null
-        val withScheme = if (trimmed.contains("://")) trimmed else "https://$trimmed"
-        val host = withScheme.toHttpUrlOrNull()?.host ?: return null
+        val host = extractHost(raw) ?: return null
         // Only strip "www." when what remains is still a multi-label domain
         // (keeps a literal "www.com" intact).
         val stripped = host.removePrefix("www.")
         return if (host.startsWith("www.") && stripped.contains(".")) stripped else host
+    }
+
+    /**
+     * Like [extractDomain] but keeps the host exactly as written (no `www.`
+     * stripping). Used for manual blocks, where every entry already covers
+     * its subdomains and stripping would block more than the user typed.
+     */
+    fun extractHost(raw: String): String? {
+        val trimmed = raw.trim()
+        if (trimmed.isBlank()) return null
+        val withScheme = if (trimmed.contains("://")) trimmed else "https://$trimmed"
+        return withScheme.toHttpUrlOrNull()?.host
     }
 }

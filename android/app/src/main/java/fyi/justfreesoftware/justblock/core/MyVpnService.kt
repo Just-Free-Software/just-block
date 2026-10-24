@@ -23,6 +23,7 @@ import fyi.justfreesoftware.justblock.data.UserPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -84,9 +85,19 @@ class MyVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private var dailyRefreshJob: Job? = null
 
+    /**
+     * True from the moment a start is accepted until teardown. Set
+     * synchronously, unlike [vpnInterface], which is only assigned once the
+     * async startup has established the TUN.
+     */
+    @Volatile
+    private var isRunning = false
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START        -> startVpn()
+            // A null intent is a START_STICKY restart after process death;
+            // SERVICE_INTERFACE is how the system starts an always-on VPN.
+            ACTION_START, SERVICE_INTERFACE, null -> startVpn()
             ACTION_STOP         -> {
                 serviceScope.launch { userPreferences.setVpnEnabled(false) }
                 stopVpn()
@@ -95,31 +106,67 @@ class MyVpnService : VpnService() {
                 val enabled = intent.getBooleanExtra(EXTRA_BLOCKING_ENABLED, true)
                 isBlockingEnabled = enabled
                 Log.i(TAG, "Blocking ${if (enabled) "enabled" else "disabled"}")
-                if (vpnInterface != null) {
-                    debounceRebuild()
-                }
+                if (isRunning) debounceRebuild() else stopIdleService()
             }
             ACTION_FLUSH_DNS_CACHE -> {
-                if (vpnInterface != null) {
-                    debounceRebuild()
-                }
+                if (isRunning) debounceRebuild() else stopIdleService()
             }
         }
         return START_STICKY
     }
 
+    /**
+     * Called when the VPN is taken away from us: another VPN app started, or
+     * the user disconnected it in system settings. The default implementation
+     * only calls stopSelf(), which would leave the proxy running and the
+     * persisted toggle stuck on.
+     */
+    override fun onRevoke() {
+        Log.w(TAG, "VPN permission revoked by the system")
+        markVpnDisabled()
+        stopVpn()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        if (isRunning) teardown()
         unregisterNetworkCallback()
         serviceScope.cancel()
         Log.d(TAG, "MyVpnService destroyed")
     }
 
+    /**
+     * Handles a command that needs a running VPN when there is none. The
+     * caller may have used startForegroundService(), so the service must
+     * enter the foreground before stopping, or the system kills the app with
+     * ForegroundServiceDidNotStartInTimeException.
+     */
+    private fun stopIdleService() {
+        Log.w(TAG, "Command received while VPN is not running — stopping")
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification(),
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        )
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    /**
+     * Persists the VPN as off when it stops without the user asking (revoked,
+     * failed to start), so the UI toggle doesn't claim it is still on.
+     * NonCancellable because the service scope dies right after stopSelf().
+     */
+    private fun markVpnDisabled() {
+        serviceScope.launch(NonCancellable) { userPreferences.setVpnEnabled(false) }
+    }
+
     private fun startVpn() {
-        if (vpnInterface != null) {
+        if (isRunning) {
             Log.w(TAG, "VPN already running — ignoring start command")
             return
         }
+        isRunning = true
 
         Log.i(TAG, "Starting VPN engine…")
 
@@ -132,40 +179,57 @@ class MyVpnService : VpnService() {
         )
 
         serviceScope.launch {
+            // Always-on VPN and sticky restarts start us without the UI, so
+            // make the persisted toggle match.
+            userPreferences.setVpnEnabled(true)
             try {
                 connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as? ConnectivityManager
                 activePhysicalNetwork = connectivityManager?.activeNetwork
 
-                vpnInterface = buildTunInterface() ?: run {
-                    Log.e(TAG, "Failed to establish TUN interface")
-                    stopVpn()
-                    return@launch
-                }
+                // Read before the first push to the proxy, which only sends
+                // the blocklist when this is true.
+                isBlockingEnabled = userPreferences.isBlockingEnabledFlow.first()
+                Log.i(TAG, "Blocking enabled: $isBlockingEnabled")
 
-                // Restore persisted pauses into the live filter before the
-                // initial push. Without this, a service start without the UI
-                // process (boot, START_STICKY restart) would forget active
-                // pauses and block mid-pause domains.
-                val persistedPauses = userPreferences.getPausedDomains()
-                val now = System.currentTimeMillis()
-                for ((domain, expiresAt) in persistedPauses) {
-                    if (expiresAt != Long.MAX_VALUE && now >= expiresAt) {
-                        // Already expired — drop it; the Rust proxy lazily
-                        // enforces expiry at query time anyway.
-                        userPreferences.removePausedDomain(domain)
-                    } else {
-                        dnsFilter.pauseDomain(domain, expiresAt)
+                // Hold the rebuild lock for the whole initial setup so a
+                // flush or network change arriving now can't interleave.
+                rebuildMutex.withLock {
+                    val tun = buildTunInterface() ?: run {
+                        Log.e(TAG, "Failed to establish TUN interface")
+                        markVpnDisabled()
+                        stopVpn()
+                        return@launch
                     }
-                }
+                    synchronized(dnsFilter) {
+                        if (!isRunning) {
+                            tun.close()
+                            return@launch
+                        }
+                        vpnInterface = tun
+                    }
 
-                startTunLoop()
+                    // Restore persisted pauses into the live filter before the
+                    // initial push. Without this, a service start without the UI
+                    // process (boot, START_STICKY restart) would forget active
+                    // pauses and block mid-pause domains.
+                    val persistedPauses = userPreferences.getPausedDomains()
+                    val now = System.currentTimeMillis()
+                    for ((domain, expiresAt) in persistedPauses) {
+                        if (expiresAt != Long.MAX_VALUE && now >= expiresAt) {
+                            // Already expired — drop it; the Rust proxy lazily
+                            // enforces expiry at query time anyway.
+                            userPreferences.removePausedDomain(domain)
+                        } else {
+                            dnsFilter.pauseDomain(domain, expiresAt)
+                        }
+                    }
+
+                    startTunLoop(tun)
+                }
                 registerNetworkCallback()
 
                 val savedUpstream = userPreferences.getUpstreamConfig()
                 Log.i(TAG, "Upstream initialised: $savedUpstream")
-
-                isBlockingEnabled = userPreferences.isBlockingEnabledFlow.first()
-                Log.i(TAG, "Blocking enabled: $isBlockingEnabled")
 
                 Log.i(TAG, "Fetching blocklist in background…")
                 blocklistRepository.loadAndCompileBlocklists()
@@ -179,8 +243,11 @@ class MyVpnService : VpnService() {
                 }
 
                 startDailyRefresh()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Error starting VPN — cleaning up", e)
+                markVpnDisabled()
                 stopVpn()
             }
         }
@@ -205,78 +272,125 @@ class MyVpnService : VpnService() {
     }
 
     private fun stopVpn() {
-        Log.i(TAG, "Stopping VPN engine…")
-
-        dailyRefreshJob?.cancel()
-        dailyRefreshJob = null
-        unregisterNetworkCallback()
-        dnsProxy?.stop()
-        dnsProxy = null
-
-        try {
-            vpnInterface?.close()
-        } catch (e: IOException) {
-            Log.e(TAG, "Failed to close TUN interface cleanly", e)
-        } finally {
-            vpnInterface = null
-        }
-
-        dnsFilter.clear()
-
+        teardown()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
-    private fun startTunLoop() {
-        // file descriptor
-        val fd = vpnInterface?.fd ?: return
+    /** Releases the tunnel, the proxy and the filter state. */
+    private fun teardown() {
+        Log.i(TAG, "Stopping VPN engine…")
+        isRunning = false
 
-        serviceScope.launch {
-            val upstreamConfig = userPreferences.getUpstreamConfig()
-            
-            var upstreamV4: String? = null
-            var upstreamV6: String? = null
-            
+        dailyRefreshJob?.cancel()
+        dailyRefreshJob = null
+        unregisterNetworkCallback()
+        releaseProxy()
+
+        synchronized(dnsFilter) {
             try {
-                val activeNetwork = connectivityManager?.activeNetwork
-                val addresses = if (activeNetwork != null) {
-                    activeNetwork.getAllByName(upstreamConfig.host)
-                } else {
-                    java.net.InetAddress.getAllByName(upstreamConfig.host)
-                }
-                
-                upstreamV4 = addresses.firstOrNull { it is java.net.Inet4Address }?.hostAddress
-                upstreamV6 = addresses.firstOrNull { it is java.net.Inet6Address }?.hostAddress
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to resolve upstream IP", e)
-            }
-            
-            // Fallbacks in case it's already an IP string
-            if (upstreamV4 == null && upstreamV6 == null) {
-                if (upstreamConfig.host.contains(":")) {
-                    upstreamV6 = upstreamConfig.host
-                } else {
-                    upstreamV4 = upstreamConfig.host
-                }
+                vpnInterface?.close()
+            } catch (e: IOException) {
+                Log.e(TAG, "Failed to close TUN interface cleanly", e)
+            } finally {
+                vpnInterface = null
             }
 
-            Log.i(TAG, "Resolved upstream ${upstreamConfig.host} to v4: $upstreamV4, v6: $upstreamV6")
+            // The proxy callbacks capture this service; drop them so the
+            // singleton filter doesn't keep a destroyed service alive.
+            dnsFilter.rustProxyCallback = null
+            dnsFilter.rustAllowlistCallback = null
+            dnsFilter.clear()
+        }
+    }
 
-            // Pass resolved IPs, but keep SNI hostname for the QUIC handshake.
-            // Backups (Cloudflare, Google) are literal IPs — no resolution needed.
-            dnsProxy = DnsProxy(fd, upstreamV4, upstreamV6, upstreamConfig.sniHostname, DOH3_BACKUPS)
-
-            val proxy = dnsProxy
-            if (proxy != null) {
-                for (quicFd in proxy.getQuicFds()) {
-                    if (protect(quicFd)) {
-                        Log.i(TAG, "Protected QUIC socket (fd: $quicFd) from VPN tunnel")
-                    } else {
-                        Log.e(TAG, "Failed to protect QUIC socket (fd: $quicFd) from VPN tunnel")
-                    }
-                }
+    /**
+     * Stops and frees the current proxy. Closing releases its QUIC sockets
+     * now rather than whenever the Kotlin handle is garbage collected; the
+     * Rust task still holds what it needs until it exits.
+     *
+     * The proxy is published, used and released under the [dnsFilter]
+     * monitor. DnsFilter invokes its push callbacks while holding that same
+     * monitor, so a callback can never call into a closed proxy, and a single
+     * lock keeps the ordering deadlock-free.
+     */
+    private fun releaseProxy() {
+        synchronized(dnsFilter) {
+            dnsProxy?.let {
+                it.stop()
+                it.close()
             }
-            
+            dnsProxy = null
+        }
+    }
+
+    /**
+     * Creates a [DnsProxy] on [tun], pushes the current filter state to it
+     * and starts it. Suspends until the proxy is running (or discarded), so
+     * callers holding [rebuildMutex] cover the whole startup.
+     *
+     * If the VPN was stopped or the TUN replaced while this was resolving the
+     * upstream, the new proxy is discarded instead of being started on a
+     * closed (and possibly reused) fd.
+     */
+    private suspend fun startTunLoop(tun: ParcelFileDescriptor) {
+        val fd = tun.fd
+        val upstreamConfig = userPreferences.getUpstreamConfig()
+
+        var upstreamV4: String? = null
+        var upstreamV6: String? = null
+
+        try {
+            val activeNetwork = connectivityManager?.activeNetwork
+            val addresses = if (activeNetwork != null) {
+                activeNetwork.getAllByName(upstreamConfig.host)
+            } else {
+                java.net.InetAddress.getAllByName(upstreamConfig.host)
+            }
+
+            upstreamV4 = addresses.firstOrNull { it is java.net.Inet4Address }?.hostAddress
+            upstreamV6 = addresses.firstOrNull { it is java.net.Inet6Address }?.hostAddress
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to resolve upstream IP", e)
+        }
+
+        // Fallbacks in case it's already an IP string
+        if (upstreamV4 == null && upstreamV6 == null) {
+            if (upstreamConfig.host.contains(":")) {
+                upstreamV6 = upstreamConfig.host
+            } else {
+                upstreamV4 = upstreamConfig.host
+            }
+        }
+
+        Log.i(TAG, "Resolved upstream ${upstreamConfig.host} to v4: $upstreamV4, v6: $upstreamV6")
+
+        // Pass resolved IPs, but keep SNI hostname for the QUIC handshake.
+        // Backups (Cloudflare, Google) are literal IPs — no resolution needed.
+        val proxy = try {
+            DnsProxy(fd, upstreamV4, upstreamV6, upstreamConfig.sniHostname, DOH3_BACKUPS)
+        } catch (e: Exception) {
+            // Rust panics (e.g. a socket that can't be bound) surface here.
+            Log.e(TAG, "Failed to create DNS proxy", e)
+            return
+        }
+
+        for (quicFd in proxy.getQuicFds()) {
+            if (protect(quicFd)) {
+                Log.i(TAG, "Protected QUIC socket (fd: $quicFd) from VPN tunnel")
+            } else {
+                Log.e(TAG, "Failed to protect QUIC socket (fd: $quicFd) from VPN tunnel")
+            }
+        }
+
+        synchronized(dnsFilter) {
+            if (!isRunning || vpnInterface !== tun) {
+                Log.w(TAG, "TUN changed while the proxy was starting — discarding it")
+                proxy.close()
+                return
+            }
+            dnsProxy = proxy
+
             dnsFilter.rustProxyCallback = { domains, pauses ->
                 if (isBlockingEnabled) {
                     dnsProxy?.updateBlocklist(domains)
@@ -288,12 +402,12 @@ class MyVpnService : VpnService() {
             }
 
             if (isBlockingEnabled) {
-                dnsProxy?.updateBlocklist(dnsFilter.getBlocklist())
-                dnsProxy?.updatePauses(dnsFilter.getPausedDomains())
+                proxy.updateBlocklist(dnsFilter.getBlocklist())
+                proxy.updatePauses(dnsFilter.getPausedDomains())
             }
-            dnsProxy?.updateAllowlist(dnsFilter.getAllowlist())
+            proxy.updateAllowlist(dnsFilter.getAllowlist())
 
-            dnsProxy?.start()
+            proxy.start()
         }
     }
 
@@ -323,10 +437,10 @@ class MyVpnService : VpnService() {
      */
     private suspend fun rebuildTunInterface() {
         rebuildMutex.withLock {
+            if (!isRunning) return
             Log.i(TAG, "Rebuilding TUN to flush DNS cache…")
 
-            dnsProxy?.stop()
-            dnsProxy = null
+            releaseProxy()
 
             try {
                 vpnInterface?.close()
@@ -334,12 +448,20 @@ class MyVpnService : VpnService() {
                 Log.w(TAG, "Error closing old TUN fd", e)
             }
 
-            vpnInterface = buildTunInterface() ?: run {
+            val tun = buildTunInterface() ?: run {
                 Log.e(TAG, "Failed to re-establish TUN after blocking re-enabled")
                 return
             }
+            synchronized(dnsFilter) {
+                if (!isRunning) {
+                    // Stopped while establishing: don't resurrect the tunnel.
+                    tun.close()
+                    return
+                }
+                vpnInterface = tun
+            }
 
-            startTunLoop()
+            startTunLoop(tun)
             Log.i(TAG, "TUN rebuilt — DNS cache flushed")
         }
     }
@@ -362,13 +484,12 @@ class MyVpnService : VpnService() {
      */
     private suspend fun reconnectUpstream() {
         rebuildMutex.withLock {
-            if (vpnInterface == null) return
+            val tun = vpnInterface ?: return
 
             Log.i(TAG, "Reconnecting upstream on new network…")
 
             // 1. Stop old proxy (kills stale QUIC connections bound to old network)
-            dnsProxy?.stop()
-            dnsProxy = null
+            releaseProxy()
 
             // 2. Give the old proxy's Tokio task time to exit and release the
             //    AsyncFd on the TUN fd.  The task may be waiting on a QUIC query
@@ -381,7 +502,8 @@ class MyVpnService : VpnService() {
             activePhysicalNetwork?.let { setUnderlyingNetworks(arrayOf(it)) }
 
             // 4. Start a fresh proxy on the same TUN fd with new QUIC sockets
-            startTunLoop()
+            //    (discarded by startTunLoop if the VPN stopped meanwhile)
+            startTunLoop(tun)
             Log.i(TAG, "Upstream reconnected — new QUIC sockets on current network")
         }
     }
@@ -452,7 +574,9 @@ class MyVpnService : VpnService() {
         }
 
         override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-            // NOT_VPN is already filtered by the NetworkRequest — no need to check here.
+            // NOT_VPN is already filtered by the NetworkRequest, and only the
+            // best matching network is reported, so a different network here
+            // means the system really switched.
             // Only act once the network passes Android's connectivity validation.
             if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return
             if (network == activePhysicalNetwork) return
@@ -481,14 +605,16 @@ class MyVpnService : VpnService() {
     private var connectivityManager: ConnectivityManager? = null
 
     /**
-     * Registers a callback that explicitly tracks physical (non-VPN) networks.
+     * Registers a callback that tracks the single best physical (non-VPN)
+     * network.
      *
-     * We use [ConnectivityManager.registerNetworkCallback] with a request that
-     * requires [NetworkCapabilities.NET_CAPABILITY_NOT_VPN] instead of
-     * [ConnectivityManager.registerDefaultNetworkCallback] because the latter
-     * reports the VPN itself as the default network when the VPN is active.
-     * The NOT_VPN check in the callback would then filter out every event,
-     * meaning we'd never detect physical network changes.
+     * [ConnectivityManager.registerDefaultNetworkCallback] can't be used: it
+     * reports the VPN itself as the default network while the VPN is active.
+     * [ConnectivityManager.registerNetworkCallback] can't either: it reports
+     * every matching network, so with Wi-Fi and mobile data both up, routine
+     * capability updates (e.g. signal strength) alternate between the two and
+     * each one would recycle the proxy. The best-matching callback only ever
+     * reports the network the system would pick for this request.
      */
     private fun registerNetworkCallback() {
         connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -496,8 +622,12 @@ class MyVpnService : VpnService() {
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
             .build()
-        connectivityManager?.registerNetworkCallback(request, networkCallback)
-        Log.d(TAG, "Network callback registered (tracking physical networks)")
+        connectivityManager?.registerBestMatchingNetworkCallback(
+            request,
+            networkCallback,
+            android.os.Handler(android.os.Looper.getMainLooper()),
+        )
+        Log.d(TAG, "Network callback registered (tracking best physical network)")
     }
 
     private fun unregisterNetworkCallback() {

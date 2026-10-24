@@ -71,12 +71,16 @@ class DnsFilter {
     /**
      * Removes a single domain from the live blocklist immediately.
      * Used when the user deletes a manual blocked domain.
+     *
+     * Also drops any pause on it: the proxy blocks a domain whose pause has
+     * expired, so a leftover pause would re-block the deleted domain.
      */
     @Synchronized
     fun removeDomain(domain: String) {
         val cleaned = domain.lowercase().trim()
         if (cleaned.isNotEmpty()) {
             blocklist = blocklist - cleaned
+            pausedDomains.remove(cleaned)
             Log.d(TAG, "Removed domain from live filter: $cleaned (total: ${blocklist.size})")
             rustProxyCallback?.invoke(blocklist.toList(), pausedDomains.toMap())
         }

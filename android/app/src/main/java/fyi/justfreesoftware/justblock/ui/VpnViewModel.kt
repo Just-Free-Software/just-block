@@ -263,14 +263,20 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptySet(),
         )
 
-    fun addManualBlockedDomain(domain: String) {
-        val cleaned = domain.trim().lowercase()
-        if (cleaned.isBlank() || cleaned.contains("|")) return
+    /**
+     * Blocks the host of [domain], which may be a bare domain or a full URL.
+     * Returns false (adding nothing) when no valid host can be parsed.
+     */
+    fun addManualBlockedDomain(domain: String): Boolean {
+        // A pasted URL like "https://example.com/page" would otherwise be
+        // stored verbatim and never match a DNS query.
+        val cleaned = WhitelistUrlParser.extractHost(domain) ?: return false
         viewModelScope.launch { prefs.addManualBlockedDomain(cleaned) }
         // Push to the live DNS filter immediately so blocking takes effect
         // without waiting for a full blocklist refresh.
         ServiceLocator.dnsFilter.addDomain(cleaned)
         flushDnsCache()
+        return true
     }
 
     fun removeManualBlockedDomain(domain: String) {
@@ -481,11 +487,29 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     fun addCustomSourceUrl(url: String) {
         val cleaned = url.trim()
         if (cleaned.isBlank()) return
-        viewModelScope.launch { prefs.addCustomSourceUrl(cleaned) }
+        viewModelScope.launch {
+            prefs.addCustomSourceUrl(cleaned)
+            reloadBlocklistsIfVpnOn()
+        }
     }
 
     fun removeCustomSourceUrl(url: String) {
-        viewModelScope.launch { prefs.removeCustomSourceUrl(url) }
+        viewModelScope.launch {
+            prefs.removeCustomSourceUrl(url)
+            reloadBlocklistsIfVpnOn()
+        }
+    }
+
+    /**
+     * Applies a changed source list to the running VPN. The repository
+     * serializes loads, so a change made mid-refresh is picked up by a
+     * follow-up load instead of being skipped. When the VPN is off, the
+     * service loads the current sources on its next start anyway.
+     */
+    private suspend fun reloadBlocklistsIfVpnOn() {
+        if (prefs.isVpnEnabledFlow.first()) {
+            repository.loadAndCompileBlocklists()
+        }
     }
 
     /** Sources that failed in the last refresh, keyed by URL. */

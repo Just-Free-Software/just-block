@@ -8,6 +8,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.util.Locale
@@ -318,10 +320,16 @@ class BlocklistRepository(
         null
     }
 
+    // Serializes loads so an older one (e.g. the service's startup load) can't
+    // finish last and overwrite a newer one that saw the latest source list.
+    private val loadMutex = Mutex()
+
     /**
      * Populates DnsFilter with blocklists, user rules, and whitelist rules
      */
-    suspend fun loadAndCompileBlocklists() = withContext(Dispatchers.IO) {
+    suspend fun loadAndCompileBlocklists() = loadMutex.withLock { loadAndCompile() }
+
+    private suspend fun loadAndCompile() = withContext(Dispatchers.IO) {
 
         _state.value = BlocklistState.Loading
 

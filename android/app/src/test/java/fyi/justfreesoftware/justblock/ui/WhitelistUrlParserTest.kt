@@ -95,4 +95,20 @@ class WhitelistUrlParserTest {
     fun nonHttpSchemeReturnsNull() {
         assertNull(WhitelistUrlParser.extractDomain("ftp://example.com/file"))
     }
+
+    @Test
+    fun extractHostReducesUrlToHost() {
+        assertEquals("example.com", WhitelistUrlParser.extractHost("https://Example.com/page?q=1"))
+    }
+
+    @Test
+    fun extractHostKeepsWww() {
+        assertEquals("www.example.com", WhitelistUrlParser.extractHost("www.example.com"))
+    }
+
+    @Test
+    fun extractHostRejectsGarbage() {
+        assertNull(WhitelistUrlParser.extractHost("not a domain"))
+        assertNull(WhitelistUrlParser.extractHost("   "))
+    }
 }

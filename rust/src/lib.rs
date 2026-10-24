@@ -925,11 +925,25 @@ async fn forward_query(
 ) {
     let deadline = tokio::time::Instant::now() + QUERY_DEADLINE;
 
+    // Backoff only exists to fail over faster. When every upstream is in
+    // backoff (e.g. all failed once during a network switch), skipping them
+    // all would SERVFAIL every query for the whole backoff window, so try
+    // them anyway — concurrent dials are coalesced by get_session.
+    let now = tokio::time::Instant::now();
+    let mut ignore_backoff = true;
     for upstream in upstreams {
-        if upstream
-            .shared
-            .in_backoff(tokio::time::Instant::now())
-            .await
+        if !upstream.shared.in_backoff(now).await {
+            ignore_backoff = false;
+            break;
+        }
+    }
+
+    for upstream in upstreams {
+        if !ignore_backoff
+            && upstream
+                .shared
+                .in_backoff(tokio::time::Instant::now())
+                .await
         {
             continue;
         }
@@ -1183,6 +1197,39 @@ mod failover_tests {
         );
         // Backoff lapses at exactly FAILED_UPSTREAM_BACKOFF.
         assert!(!shared.in_backoff(now + FAILED_UPSTREAM_BACKOFF).await);
+    }
+
+    /// No real network needed: 192.0.2.1 never answers, so the dial fails
+    /// (by timeout or an immediate unreachable error) either way.
+    #[tokio::test]
+    async fn upstreams_are_retried_when_all_are_in_backoff() {
+        let upstream = Arc::new(Upstream {
+            kind: UpstreamKind::Doq {
+                endpoint_v4: Some(Arc::new(QuicEndpoint::new_doq_v4().unwrap())),
+                endpoint_v6: None,
+                ip_v4: Some("192.0.2.1".parse().unwrap()),
+                ip_v6: None,
+            },
+            sni: "dns.adguard-dns.com".to_string(),
+            shared: Arc::new(UpstreamShared::default()),
+        });
+        let first_failure = tokio::time::Instant::now();
+        upstream.shared.mark_failed(first_failure).await;
+
+        let payload = make_query("example.com");
+        let req_ip = wrap_query(&payload);
+        let (tx, mut rx) = mpsc::channel(10);
+        forward_query(&[upstream.clone()], &payload, &req_ip, &tx).await;
+
+        // Still a SERVFAIL (the upstream is dead), but it was dialed again:
+        // the failed attempt pushed the backoff window past the original.
+        let msg = unwrap_response(&rx.recv().await.expect("a SERVFAIL"));
+        assert_eq!(msg.header().rcode(), Rcode::SERVFAIL);
+        let until = upstream.shared.backoff_until.lock().await.unwrap();
+        assert!(
+            until > first_failure + FAILED_UPSTREAM_BACKOFF,
+            "the backed-off upstream should have been retried"
+        );
     }
 
     #[tokio::test]
