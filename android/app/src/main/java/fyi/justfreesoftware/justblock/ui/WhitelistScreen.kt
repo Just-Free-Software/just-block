@@ -60,7 +60,7 @@ fun WhitelistScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = """
-                            Website — Whitelisted domains are never blocked, no matter which blocklist they appear in. Paste a full URL or just a domain; the domain part is what gets whitelisted.
+                            Website — Whitelisted domains are never blocked. Whitelisting a site does not whitelist the ads that the site might link to.
 
                             Apps — Selected apps bypass the VPN entirely and use your normal connection. All other apps will have their traffic routed through the VPN to be filtered.
                         """.trimIndent(),
