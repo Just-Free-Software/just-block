@@ -1,1 +1,3 @@
 /build
+# Release outputs (.aab, R8 mapping, native symbols) belong in Play Console / GitHub Releases
+/release
