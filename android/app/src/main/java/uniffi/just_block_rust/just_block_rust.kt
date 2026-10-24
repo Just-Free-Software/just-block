@@ -681,6 +681,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_stop(
     ): Int
+    external fun uniffi_just_block_rust_checksum_method_dnsproxy_update_allowlist(
+    ): Int
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_update_blocklist(
     ): Int
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_update_pauses(
@@ -718,6 +720,8 @@ internal object UniffiLib {
     external fun uniffi_just_block_rust_fn_method_dnsproxy_start(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_just_block_rust_fn_method_dnsproxy_stop(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_just_block_rust_fn_method_dnsproxy_update_allowlist(`ptr`: Long,`domains`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_just_block_rust_fn_method_dnsproxy_update_blocklist(`ptr`: Long,`domains`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -849,6 +853,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_stop() and 0xFFFF) != 15748) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_update_allowlist() and 0xFFFF) != 6744) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_update_blocklist() and 0xFFFF) != 1097) {
@@ -1239,6 +1246,13 @@ public interface DnsProxyInterface {
      */
     fun `stop`()
     
+    /**
+     * Replaces the allowlist (user-whitelisted domains). An allowlisted
+     * domain — and every subdomain of it — is always forwarded, overriding
+     * both the blocklist and expired pauses.
+     */
+    fun `updateAllowlist`(`domains`: List<kotlin.String>)
+    
     fun `updateBlocklist`(`domains`: List<kotlin.String>)
     
     /**
@@ -1413,6 +1427,24 @@ open class DnsProxy: Disposable, AutoCloseable, DnsProxyInterface
     UniffiLib.uniffi_just_block_rust_fn_method_dnsproxy_stop(
         it,
         _status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Replaces the allowlist (user-whitelisted domains). An allowlisted
+     * domain — and every subdomain of it — is always forwarded, overriding
+     * both the blocklist and expired pauses.
+     */override fun `updateAllowlist`(`domains`: List<kotlin.String>)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_method_dnsproxy_update_allowlist(
+        it,
+        
+        FfiConverterSequenceString.lower(`domains`),_status)
 }
     }
     

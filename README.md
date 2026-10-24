@@ -10,10 +10,21 @@ Just Block uses Android's `VpnService` API to establish a local TUN interface. I
 
 1. **Traffic Interception:** The TUN file descriptor is passed to the Rust `DnsProxy`.
 2. **DNS Extraction:** The Rust proxy uses `etherparse` to parse IP/UDP packets and extract raw DNS queries.
-3. **Filtering:** Queries are evaluated against a compiled Radix Trie in Rust containing blocked domains. Temporarily paused domains live in a second trie in Rust; their expiry is enforced lazily at query time, so a pause ends (and blocking resumes) even when the app's UI process — and its countdown timers — are gone.
+3. **Filtering:** Queries are evaluated against a compiled Radix Trie in Rust containing blocked domains. Temporarily paused domains live in a second trie in Rust; their expiry is enforced lazily at query time, so a pause ends (and blocking resumes) even when the app's UI process — and its countdown timers — are gone. Whitelisted domains live in a third trie that is checked first and overrides both.
 4. **Resolution or Blocking:**
    - **Blocked:** If the domain matches the trie, the proxy immediately responds with a null/unreachable response, preventing the ad/tracker from loading.
    - **Allowed:** If the domain is safe, the query is forwarded to an upstream DNS resolver using DNS-over-QUIC (DoQ) powered by the `quinn` crate in Rust. 
+
+### Blocklist format
+Every blocklist entry is treated as a **wildcard**: an entry `example.com` blocks `example.com` and all of its subdomains (`*.example.com`), whatever format the list uses. `FilterParser` in `BlocklistRepository.kt` reduces each line to a bare domain:
+
+| Line | Becomes | Note |
+|---|---|---|
+| `example.com` | `example.com` | |
+| `0.0.0.0 example.com` | `example.com` | A real hosts file blocks only the exact name; here subdomains are blocked too. Only the first host on a line is read. |
+| `\|\|example.com^` | `example.com` | Same meaning as adblock syntax. |
+| `*.example.com` | `example.com` | The apex domain is blocked as well. |
+| `example.com##.ad`, `@@\|\|example.com^`, `\|\|example.com^$third-party`, `\|\|example.com/path^` | skipped | Cosmetic rules, exceptions, and rules with options or paths can't be expressed as a DNS block. |
 
 ### Core (`just_block_rust` & `fyi.justfreesoftware.justblock.core`)
 The VPN orchestration and packet processing happens across Kotlin and Rust boundaries.

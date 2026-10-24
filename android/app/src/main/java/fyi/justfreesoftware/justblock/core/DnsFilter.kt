@@ -16,12 +16,23 @@ class DnsFilter {
     private var blocklist: Set<String> = emptySet()
 
     /**
+     * User-whitelisted domains. Enforced by the Rust proxy, where an
+     * allowlisted domain (and every subdomain of it) overrides the
+     * blocklist, so it doesn't matter which exact form a blocklist uses.
+     */
+    @Volatile
+    private var allowlist: Set<String> = emptySet()
+
+    /**
      * Pushes the current blocklist and pause set to the Rust proxy whenever
      * either changes. The proxy enforces pause expiry lazily at query time,
      * so pauses keep working even when the app process (and its countdown
      * timers) is gone.
      */
     var rustProxyCallback: ((List<String>, Map<String, Long>) -> Unit)? = null
+
+    /** Pushes the current allowlist to the Rust proxy whenever it changes. */
+    var rustAllowlistCallback: ((List<String>) -> Unit)? = null
 
     /**
      * Domains whose blocking is temporarily paused.
@@ -59,8 +70,7 @@ class DnsFilter {
 
     /**
      * Removes a single domain from the live blocklist immediately.
-     * Used when the user whitelists a domain so it is unblocked without
-     * waiting for a full blocklist refresh.
+     * Used when the user deletes a manual blocked domain.
      */
     @Synchronized
     fun removeDomain(domain: String) {
@@ -71,6 +81,38 @@ class DnsFilter {
             rustProxyCallback?.invoke(blocklist.toList(), pausedDomains.toMap())
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Allowlist
+    // -------------------------------------------------------------------------
+
+    @Synchronized
+    fun updateAllowlist(newAllowlist: Set<String>) {
+        allowlist = newAllowlist.map { it.lowercase().trim() }.filter { it.isNotEmpty() }.toSet()
+        rustAllowlistCallback?.invoke(allowlist.toList())
+    }
+
+    @Synchronized
+    fun allowDomain(domain: String) {
+        val cleaned = domain.lowercase().trim()
+        if (cleaned.isNotEmpty()) {
+            allowlist = allowlist + cleaned
+            Log.d(TAG, "Allowlisted domain: $cleaned")
+            rustAllowlistCallback?.invoke(allowlist.toList())
+        }
+    }
+
+    @Synchronized
+    fun disallowDomain(domain: String) {
+        val cleaned = domain.lowercase().trim()
+        if (cleaned.isNotEmpty()) {
+            allowlist = allowlist - cleaned
+            Log.d(TAG, "Removed domain from allowlist: $cleaned")
+            rustAllowlistCallback?.invoke(allowlist.toList())
+        }
+    }
+
+    fun getAllowlist(): List<String> = allowlist.toList()
 
     // -------------------------------------------------------------------------
     // Per-domain pause
@@ -113,9 +155,11 @@ class DnsFilter {
     @Synchronized
     fun clear() {
         this.blocklist = emptySet()
+        this.allowlist = emptySet()
         pausedDomains.clear()
         Log.d(TAG, "DnsFilter memory cleared.")
         rustProxyCallback?.invoke(blocklist.toList(), pausedDomains.toMap())
+        rustAllowlistCallback?.invoke(allowlist.toList())
     }
 
     fun getBlocklist(): List<String> = blocklist.toList()

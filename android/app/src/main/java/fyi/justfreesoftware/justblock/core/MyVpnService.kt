@@ -283,11 +283,15 @@ class MyVpnService : VpnService() {
                     dnsProxy?.updatePauses(pauses)
                 }
             }
+            dnsFilter.rustAllowlistCallback = { domains ->
+                dnsProxy?.updateAllowlist(domains)
+            }
 
             if (isBlockingEnabled) {
                 dnsProxy?.updateBlocklist(dnsFilter.getBlocklist())
                 dnsProxy?.updatePauses(dnsFilter.getPausedDomains())
             }
+            dnsProxy?.updateAllowlist(dnsFilter.getAllowlist())
 
             dnsProxy?.start()
         }

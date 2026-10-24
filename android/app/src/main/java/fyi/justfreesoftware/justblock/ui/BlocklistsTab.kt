@@ -19,6 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
+import fyi.justfreesoftware.justblock.data.BlocklistFetcher
+import fyi.justfreesoftware.justblock.data.SourceIssue
+import fyi.justfreesoftware.justblock.data.SourceProblem
 
 @Composable
 fun BlocklistsTab(
@@ -26,6 +29,7 @@ fun BlocklistsTab(
     modifier: Modifier = Modifier,
 ) {
     val customUrls by viewModel.customSourceUrls.collectAsState()
+    val sourceIssues by viewModel.sourceIssues.collectAsState()
     val focusManager = LocalFocusManager.current
 
     Column(
@@ -62,12 +66,47 @@ fun BlocklistsTab(
                 contentPadding = PaddingValues(vertical = 4.dp),
             ) {
                 items(customUrls.toList(), key = { "url_$it" }) { url ->
-                    DomainRow(
-                        label    = url,
-                        onDelete = { viewModel.removeCustomSourceUrl(url) },
-                    )
+                    Column {
+                        DomainRow(
+                            label    = url,
+                            onDelete = { viewModel.removeCustomSourceUrl(url) },
+                        )
+                        sourceIssues[url]?.let { issue ->
+                            Text(
+                                text  = issue.message(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(bottom = 8.dp),
+                            )
+                        }
+                    }
                 }
             }
         }
     }
+}
+
+private fun SourceIssue.message(): String {
+    val prefix = if (usingSavedCopy) "Couldn't update, using the last downloaded copy: " else "Not loaded: "
+    return prefix + problem.reason()
+}
+
+private fun SourceProblem.reason(): String = when (this) {
+    SourceProblem.INVALID_LINK ->
+        "this isn't a valid https:// link."
+    SourceProblem.SITE_NOT_FOUND ->
+        "this site doesn't exist, or you're offline."
+    SourceProblem.PAGE_NOT_FOUND ->
+        "nothing exists at this link."
+    SourceProblem.SERVER_ERROR ->
+        "the site returned an error. Try again later."
+    SourceProblem.DOWNLOAD_FAILED ->
+        "the download failed. Check your connection."
+    SourceProblem.NOT_A_BLOCKLIST ->
+        "this link isn't a blocklist. Link to the raw text file."
+    SourceProblem.TOO_LARGE ->
+        "this blocklist is too large."
+    SourceProblem.OVER_TOTAL_LIMIT ->
+        "your blocklists together are over the " +
+            "%,d domain limit.".format(BlocklistFetcher.MAX_DOMAINS)
 }

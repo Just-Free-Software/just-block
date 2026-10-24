@@ -9,6 +9,7 @@ import fyi.justfreesoftware.justblock.core.UpstreamConfig
 import fyi.justfreesoftware.justblock.core.MyVpnService
 import fyi.justfreesoftware.justblock.data.BlocklistRepository
 import fyi.justfreesoftware.justblock.data.BlocklistState
+import fyi.justfreesoftware.justblock.data.SourceIssue
 import fyi.justfreesoftware.justblock.data.UserPreferences
 import fyi.justfreesoftware.justblock.ui.theme.ThemeMode
 import kotlinx.coroutines.Job
@@ -375,19 +376,18 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         val cleaned = domain.trim().lowercase()
         if (cleaned.isBlank()) return
         viewModelScope.launch { prefs.addWhitelistedDomain(cleaned) }
-        // Immediately remove from the live filter so the domain is
-        // unblocked without waiting for a full blocklist refresh.
-        ServiceLocator.dnsFilter.removeDomain(cleaned)
+        // Allowlist takes precedence over the blocklist in the proxy, so
+        // this unblocks the domain and its subdomains immediately.
+        ServiceLocator.dnsFilter.allowDomain(cleaned)
         flushDnsCache()
     }
 
     fun removeWhitelistedDomain(domain: String) {
         val cleaned = domain.trim().lowercase()
         viewModelScope.launch { prefs.removeWhitelistedDomain(cleaned) }
-        // Re-add to the live filter so it takes effect immediately.
-        // If it wasn't in any blocklist this is a harmless no-op since
-        // shouldBlock() only matches known domains.
-        ServiceLocator.dnsFilter.addDomain(cleaned)
+        // Blocklist entries were never removed for the whitelist, so
+        // dropping the allowlist entry restores whatever blocking applies.
+        ServiceLocator.dnsFilter.disallowDomain(cleaned)
         flushDnsCache()
     }
 
@@ -487,6 +487,14 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     fun removeCustomSourceUrl(url: String) {
         viewModelScope.launch { prefs.removeCustomSourceUrl(url) }
     }
+
+    /** Sources that failed in the last refresh, keyed by URL. */
+    val sourceIssues: StateFlow<Map<String, SourceIssue>> = repository.sourceIssues
+        .stateIn(
+            scope        = viewModelScope,
+            started      = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyMap(),
+        )
 
 
 

@@ -70,4 +70,29 @@ class WhitelistUrlParserTest {
     fun literalWwwComKeptIntact() {
         assertEquals("www.com", WhitelistUrlParser.extractDomain("www.com"))
     }
+
+    @Test
+    fun subdomainPreserved() {
+        assertEquals("docs.example.com", WhitelistUrlParser.extractDomain("https://docs.example.com/guide"))
+    }
+
+    @Test
+    fun queryAndFragmentIgnored() {
+        assertEquals("example.com", WhitelistUrlParser.extractDomain("https://example.com/?q=1#top"))
+    }
+
+    @Test
+    fun userInfoIgnored() {
+        assertEquals("example.com", WhitelistUrlParser.extractDomain("https://user:pass@example.com/"))
+    }
+
+    @Test
+    fun internationalizedDomainConvertedToPunycode() {
+        assertEquals("xn--bcher-kva.de", WhitelistUrlParser.extractDomain("https://bücher.de/"))
+    }
+
+    @Test
+    fun nonHttpSchemeReturnsNull() {
+        assertNull(WhitelistUrlParser.extractDomain("ftp://example.com/file"))
+    }
 }
