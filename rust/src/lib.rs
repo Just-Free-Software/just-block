@@ -239,12 +239,18 @@ impl DnsProxy {
     }
 
     pub fn update_blocklist(&self, domains: Vec<String>) {
+        #[cfg_attr(
+            not(all(target_os = "android", feature = "dns-trace")),
+            allow(unused_variables)
+        )]
         let requested = domains.len();
         let trie = domain_trie(domains);
         log_trace!(&format!(
             "update_blocklist: {} entries requested, {} inserted",
             requested,
-            trie.len()
+            // Fully qualified: a `use` of the trait would be unused (and
+            // warn) in builds where log_trace! compiles to nothing.
+            radix_trie::TrieCommon::len(&trie)
         ));
         *self.blocklist.write().unwrap_or_else(|e| e.into_inner()) = trie;
     }
