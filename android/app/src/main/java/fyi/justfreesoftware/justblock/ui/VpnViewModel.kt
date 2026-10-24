@@ -265,19 +265,29 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Blocks the host of [domain], which may be a bare domain or a full URL.
-     * Returns false (adding nothing) when no valid host can be parsed.
+     *
+     * Input with no valid host is still saved, like an invalid blocklist
+     * link, so the list can show why it isn't blocking (see
+     * [isValidManualBlock]); it never reaches the filter.
      */
-    fun addManualBlockedDomain(domain: String): Boolean {
+    fun addManualBlockedDomain(domain: String) {
+        val trimmed = domain.trim()
+        // "|" would corrupt the persisted "domain|expiry" pause encoding.
+        if (trimmed.isBlank() || trimmed.contains("|")) return
         // A pasted URL like "https://example.com/page" would otherwise be
         // stored verbatim and never match a DNS query.
-        val cleaned = WhitelistUrlParser.extractHost(domain) ?: return false
-        viewModelScope.launch { prefs.addManualBlockedDomain(cleaned) }
+        val host = WhitelistUrlParser.extractHost(trimmed)
+        viewModelScope.launch { prefs.addManualBlockedDomain(host ?: trimmed) }
+        if (host == null) return
         // Push to the live DNS filter immediately so blocking takes effect
         // without waiting for a full blocklist refresh.
-        ServiceLocator.dnsFilter.addDomain(cleaned)
+        ServiceLocator.dnsFilter.addDomain(host)
         flushDnsCache()
-        return true
     }
+
+    /** False for a saved manual block that isn't a host, so it can't block anything. */
+    fun isValidManualBlock(domain: String): Boolean =
+        WhitelistUrlParser.extractHost(domain) == domain
 
     fun removeManualBlockedDomain(domain: String) {
         val cleaned = domain.trim().lowercase()

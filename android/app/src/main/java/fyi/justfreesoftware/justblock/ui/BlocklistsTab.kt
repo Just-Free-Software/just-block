@@ -42,7 +42,7 @@ fun BlocklistsTab(
         // ── Add field ─────────────────────────────────────────────────────
         DomainInputRow(
             placeholder = "https://example.com/hosts.txt",
-            onAdd       = { viewModel.addCustomSourceUrl(it); true },
+            onAdd       = { viewModel.addCustomSourceUrl(it) },
             modifier    = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
 

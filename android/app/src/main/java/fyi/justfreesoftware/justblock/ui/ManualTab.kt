@@ -97,13 +97,23 @@ fun ManualTab(
                 contentPadding = PaddingValues(vertical = 4.dp),
             ) {
                 items(manualBlocked.toList().sorted(), key = { "blocked_$it" }) { domain ->
-                    BlockedDomainRow(
-                        domain    = domain,
-                        expiresAt = pausedDomains[domain],
-                        onPause   = { durationMs -> viewModel.pauseBlockedDomain(domain, durationMs) },
-                        onResume  = { viewModel.resumeBlockedDomain(domain) },
-                        onDelete  = { viewModel.removeManualBlockedDomain(domain) },
-                    )
+                    Column {
+                        BlockedDomainRow(
+                            domain    = domain,
+                            expiresAt = pausedDomains[domain],
+                            onPause   = { durationMs -> viewModel.pauseBlockedDomain(domain, durationMs) },
+                            onResume  = { viewModel.resumeBlockedDomain(domain) },
+                            onDelete  = { viewModel.removeManualBlockedDomain(domain) },
+                        )
+                        if (!viewModel.isValidManualBlock(domain)) {
+                            Text(
+                                text  = "Not blocked: this isn't a valid website. Enter a domain like example.com.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(start = 12.dp, bottom = 8.dp),
+                            )
+                        }
+                    }
                 }
             }
         }
