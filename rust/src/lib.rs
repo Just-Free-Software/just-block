@@ -1134,7 +1134,7 @@ mod tests {
     #[test]
     fn whitelisted_parent_overrides_blocked_subdomain() {
         // Blocklists often list "www.example.com" separately; whitelisting
-        // the bare domain (what WhitelistUrlParser produces) must cover it.
+        // the bare domain (what DomainInputParser produces) must cover it.
         let block = list(&["www.example.com", "cdn.example.com"]);
         let allow = list(&["example.com"]);
         let pauses = trie_from(&[]);

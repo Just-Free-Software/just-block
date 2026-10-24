@@ -270,9 +270,10 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         val trimmed = domain.trim()
         // "|" would corrupt the persisted "domain|expiry" pause encoding.
         if (trimmed.isBlank() || trimmed.contains("|")) return
-        // A pasted URL like "https://example.com/page" would otherwise be
-        // stored verbatim and never match a DNS query.
-        val host = WhitelistUrlParser.extractHost(trimmed)
+        // A pasted URL like "https://www.example.com/page" is reduced to
+        // "example.com": stored verbatim it would never match a DNS query,
+        // and keeping "www." would leave the rest of the site reachable.
+        val host = DomainInputParser.extractDomain(trimmed)
         viewModelScope.launch { prefs.addManualBlockedDomain(host ?: trimmed) }
         if (host == null) return
         // Push to the live DNS filter immediately so blocking takes effect
@@ -283,7 +284,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     /** False for a saved manual block that isn't a host, so it can't block anything. */
     fun isValidManualBlock(domain: String): Boolean =
-        WhitelistUrlParser.extractHost(domain) == domain
+        DomainInputParser.extractDomain(domain) == domain
 
     fun removeManualBlockedDomain(domain: String) {
         val cleaned = domain.trim().lowercase()
@@ -412,7 +413,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
      * snackbar.
      */
     fun addWhitelistedUrl(raw: String): AddUrlResult {
-        val domain = WhitelistUrlParser.extractDomain(raw)
+        val domain = DomainInputParser.extractDomain(raw)
             ?: return AddUrlResult.InvalidUrl
         if (domain in whitelistedDomains.value) return AddUrlResult.AlreadyWhitelisted
         addWhitelistedDomain(domain)
