@@ -132,19 +132,15 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     fun setBlockingEnabled(enabled: Boolean) {
         viewModelScope.launch {
             prefs.setBlockingEnabled(enabled)
-            // Push the change to the live proxy immediately — no restart needed
-            // since isBlockingEnabled is a plain @Volatile field on DnsProxyServer.
-            // We reach it via the service; if the service isn't running this is a
-            // no-op (the value will be read from prefs when the service next starts).
+            // Push the change to the running service, which rebuilds the TUN
+            // to apply it. When the VPN is off, don't wake the service: it
+            // reads the setting from prefs on its next start.
+            if (!prefs.isVpnEnabledFlow.first()) return@launch
             val serviceIntent = Intent(getApplication(), MyVpnService::class.java).apply {
                 action = MyVpnService.ACTION_SET_BLOCKING
                 putExtra(MyVpnService.EXTRA_BLOCKING_ENABLED, enabled)
             }
-            if (isVpnEnabled.value && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                getApplication<Application>().startForegroundService(serviceIntent)
-            } else {
-                getApplication<Application>().startService(serviceIntent)
-            }
+            getApplication<Application>().startForegroundService(serviceIntent)
         }
     }
 

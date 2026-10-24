@@ -434,15 +434,29 @@ impl DnsSession {
         }
     }
 
+    /// Sends `payload` with its message ID zeroed: RFC 9250 (DoQ) requires
+    /// ID 0, and RFC 8484 (DoH) recommends it for cache friendliness. The
+    /// client's ID is restored on the response by create_forwarded_response.
     async fn send_query(
         &self,
         payload: &[u8],
     ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+        let payload = with_zero_id(payload);
         match self {
-            DnsSession::Doq(c) => c.send_query(payload).await,
-            DnsSession::Doh3(c) => c.send_query(payload).await,
+            DnsSession::Doq(c) => c.send_query(&payload).await,
+            DnsSession::Doh3(c) => c.send_query(&payload).await,
         }
     }
+}
+
+/// Copy of a DNS message with its 16-bit message ID set to 0.
+fn with_zero_id(payload: &[u8]) -> Vec<u8> {
+    let mut out = payload.to_vec();
+    if out.len() >= 2 {
+        out[0] = 0;
+        out[1] = 0;
+    }
+    out
 }
 
 /// Shared upstream-connection state for one proxy run.
@@ -1013,6 +1027,17 @@ async fn send_servfail(req_ip: &[u8], payload: &[u8], tx: &mpsc::Sender<Vec<u8>>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn upstream_query_id_is_zeroed() {
+        let mut q = crate::wire_test_util::make_query("example.com");
+        q[0] = 0xab;
+        q[1] = 0xcd;
+        let zeroed = with_zero_id(&q);
+        assert_eq!(&zeroed[..2], &[0, 0]);
+        assert_eq!(&zeroed[2..], &q[2..], "only the ID may change");
+        assert!(with_zero_id(&[0x12]).len() == 1, "short input is left alone");
+    }
 
     #[test]
     fn expiry_boundary_is_inclusive() {

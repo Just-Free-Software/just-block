@@ -94,6 +94,10 @@ pub fn create_tcp_rst(sliced: &SlicedPacket) -> Option<Vec<u8>> {
         TransportSlice::Tcp(tcp) => tcp,
         _ => return None,
     };
+    // RFC 9293: a RST is never sent in response to a RST.
+    if tcp.rst() {
+        return None;
+    }
 
     let mut tcp_resp = TcpHeader::new(tcp.destination_port(), tcp.source_port(), 0, 0);
     tcp_resp.rst = true;
@@ -242,6 +246,28 @@ mod wire_tests {
         assert_eq!(parsed.header_counts().qdcount(), 1);
         // Transaction ID echoes the query
         assert_eq!(parsed.header().id(), msg.header().id());
+    }
+
+    fn tcp_packet(rst: bool) -> Vec<u8> {
+        let mut packet = Vec::new();
+        let builder = PacketBuilder::ipv4([10, 0, 0, 2], [10, 0, 0, 1], 64).tcp(40000, 53, 1, 1024);
+        let builder = if rst { builder.rst() } else { builder.syn() };
+        builder.write(&mut packet, &[]).unwrap();
+        packet
+    }
+
+    #[test]
+    fn tcp_syn_gets_a_rst() {
+        let packet = tcp_packet(false);
+        let sliced = SlicedPacket::from_ip(&packet).unwrap();
+        assert!(create_tcp_rst(&sliced).is_some());
+    }
+
+    #[test]
+    fn tcp_rst_is_not_answered() {
+        let packet = tcp_packet(true);
+        let sliced = SlicedPacket::from_ip(&packet).unwrap();
+        assert!(create_tcp_rst(&sliced).is_none());
     }
 
     #[test]
