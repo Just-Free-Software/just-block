@@ -1,5 +1,6 @@
 package fyi.justfreesoftware.justblock.ui
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
@@ -227,9 +229,18 @@ private fun BlockedDomainRow(
                     checked = menuExpanded,
                     onCheckedChange = { menuExpanded = it },
                 ) {
+                    // Standard M3 split button behaviour: the arrow flips
+                    // while the menu is open.
+                    val rotation by animateFloatAsState(
+                        targetValue = if (menuExpanded) 180f else 0f,
+                        label       = "Trailing Icon Rotation",
+                    )
                     Icon(
                         imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = "Expand menu"
+                        contentDescription = if (menuExpanded) "Collapse menu" else "Expand menu",
+                        modifier = Modifier
+                            .size(SplitButtonDefaults.TrailingIconSize)
+                            .graphicsLayer { rotationZ = rotation },
                     )
                 }
             },
