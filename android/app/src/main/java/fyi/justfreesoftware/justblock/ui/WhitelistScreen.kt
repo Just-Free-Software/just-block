@@ -1,5 +1,7 @@
 package fyi.justfreesoftware.justblock.ui
 
+import androidx.compose.ui.res.stringResource
+import fyi.justfreesoftware.justblock.R
 import fyi.justfreesoftware.justblock.ui.theme.HeaderTextStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,16 +56,12 @@ fun WhitelistScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Whitelist Info",
+                        text = stringResource(R.string.whitelist_info_title),
                         style = MaterialTheme.typography.titleLarge
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = """
-                            Website — Whitelisted domains are never blocked. Whitelisting a site does not whitelist the ads that the site might link to.
-
-                            Apps — Selected apps bypass the VPN entirely and use your normal connection. All other apps will have their traffic routed through the VPN to be filtered.
-                        """.trimIndent(),
+                        text = stringResource(R.string.whitelist_info_body),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -72,7 +70,7 @@ fun WhitelistScreen(
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(onClick = { showInfoDialog = false }) {
-                            Text("OK")
+                            Text(stringResource(R.string.ok))
                         }
                     }
                 }
@@ -94,7 +92,7 @@ fun WhitelistScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text  = "Whitelist",
+                    text  = stringResource(R.string.nav_whitelist),
                     style = HeaderTextStyle,
                 )
                 Spacer(Modifier.weight(1f))
@@ -104,7 +102,7 @@ fun WhitelistScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Info,
-                        contentDescription = "Info",
+                        contentDescription = stringResource(R.string.info),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(40.dp)
                     )
@@ -118,7 +116,7 @@ fun WhitelistScreen(
                     onClick  = { selectedTab = 0 },
                     text = {
                         Text(
-                            "Website",
+                            stringResource(R.string.tab_website),
                             style = MaterialTheme.typography.labelLarge
                         )
                     },
@@ -128,7 +126,7 @@ fun WhitelistScreen(
                     onClick  = { selectedTab = 1 },
                     text = {
                         Text(
-                            "Apps",
+                            stringResource(R.string.tab_apps),
                             style = MaterialTheme.typography.labelLarge
                         )
                     },

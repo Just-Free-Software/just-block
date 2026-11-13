@@ -1,0 +1,109 @@
+<resources>
+    <!-- Common -->
+    <string name="ok">OK</string>
+    <string name="info">Informazioni</string>
+    <string name="add">Aggiungi</string>
+    <string name="remove">Rimuovi</string>
+    <string name="delete">Elimina</string>
+    <string name="example_domain_hint">es. example.com</string>
+    <string name="tab_website">Sito web</string>
+
+    <!-- Welcome dialog -->
+    <string name="welcome_title">Ti diamo il benvenuto!</string>
+    <string name="welcome_intro">Questa app richiede due autorizzazioni:</string>
+    <string name="welcome_notification_title">Autorizzazione per le notifiche</string>
+    <string name="welcome_notification_body">Ti avvisa quando il blocco è attivo e, soprattutto, impedisce al telefono di chiudere l\'app in background.</string>
+    <string name="welcome_vpn_title">Autorizzazione VPN</string>
+    <string name="welcome_vpn_body">Usiamo una VPN locale per filtrare il traffico di rete e bloccare i domini selezionati.</string>
+    <string name="welcome_dont_show_again">Non mostrare più</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_blocking">Blocco</string>
+    <string name="nav_whitelist">Whitelist</string>
+
+    <!-- Home screen -->
+    <string name="home_info_body">La VPN si avvia automaticamente con l\'app e resta attiva in background. Per chiudere completamente l\'app, premi il pulsante Ferma e chiudi.\n\nQuesta app non funziona correttamente con il DNS privato attivo. Se non hai mai modificato questa impostazione di Android, non devi preoccuparti.\n\nSe l\'app smette di funzionare dopo lunghi periodi, la causa potrebbe essere l\'ottimizzazione della batteria. Valuta di impostarla su Senza limitazioni in Impostazioni &gt; App &gt; Just Block.</string>
+    <plurals name="home_blocked_sites">
+        <item quantity="one">sito bloccato</item>
+        <item quantity="many">siti bloccati</item>
+        <item quantity="other">siti bloccati</item>
+    </plurals>
+    <plurals name="home_whitelisted_sites">
+        <item quantity="one">sito in whitelist</item>
+        <item quantity="many">siti in whitelist</item>
+        <item quantity="other">siti in whitelist</item>
+    </plurals>
+    <string name="home_add_rule">Aggiungi una regola</string>
+    <string name="home_enable_blocking">Attiva blocco</string>
+    <string name="home_start_on_boot">Avvia all\'accensione</string>
+    <string name="home_status">Stato:</string>
+    <string name="home_status_on">ATTIVA</string>
+    <string name="home_status_off">DISATTIVATA</string>
+    <string name="home_blocklists_updating">(aggiornamento blocklist…)</string>
+    <string name="home_blocklists_error">(⚠ errore di aggiornamento blocklist)</string>
+    <string name="home_stop_and_close">Ferma e chiudi</string>
+    <string name="home_link_website">SITO WEB</string>
+    <string name="home_link_privacy">PRIVACY</string>
+    <string name="theme_light">Chiaro</string>
+    <string name="theme_dark">Scuro</string>
+    <string name="theme_dynamic">Dinamico</string>
+
+    <!-- Blocking screen -->
+    <string name="blocking_info_title">Informazioni sul blocco</string>
+    <string name="blocking_info_body">Sito web — I siti che aggiungi qui vengono bloccati subito, indipendentemente dalle blocklist che usi. Puoi mettere in pausa il blocco di un sito o rimuoverlo del tutto.\n\nBlocklist — Usiamo i server DNS di AdGuard (con Cloudflare e Google come riserve automatiche), che bloccano la maggior parte degli annunci per impostazione predefinita. Qui puoi anche aggiungere gli URL delle tue blocklist.</string>
+    <string name="tab_blocklists">Blocklist</string>
+
+    <!-- Manual (website) block tab -->
+    <string name="manual_empty">Aggiungi qui un sito web per bloccarlo.</string>
+    <string name="manual_invalid">Non bloccato: questo non è un sito web valido. Inserisci un dominio come example.com.</string>
+    <string name="pause_15_minutes">15 minuti</string>
+    <string name="pause_1_hour">1 ora</string>
+    <string name="pause_1_day">1 giorno</string>
+    <string name="pause_indefinitely">A tempo indeterminato</string>
+    <string name="paused_indefinitely">in pausa a tempo indeterminato</string>
+    <string name="paused_with_remaining">in pausa · %1$s</string>
+    <string name="remaining_under_minute">&lt;1 min rimanente</string>
+    <string name="remaining_minutes">%1$d min rimanenti</string>
+    <string name="remaining_hours">%1$d h rimanenti</string>
+    <string name="remaining_days">%1$d g rimanenti</string>
+    <string name="resume">Riprendi</string>
+    <string name="pause">Pausa</string>
+    <string name="collapse_menu">Comprimi menu</string>
+    <string name="expand_menu">Espandi menu</string>
+
+    <!-- Blocklists tab -->
+    <string name="blocklists_empty">Aggiungi il link a una blocklist per bloccare gruppi di siti web.</string>
+    <string name="source_issue_using_saved_copy">Impossibile aggiornare, uso l\'ultima copia scaricata: %1$s</string>
+    <string name="source_issue_not_loaded">Non caricata: %1$s</string>
+    <string name="source_problem_invalid_link">questo non è un link https:// valido.</string>
+    <string name="source_problem_site_not_found">questo sito non esiste, oppure sei offline.</string>
+    <string name="source_problem_page_not_found">non c\'è nulla a questo link.</string>
+    <string name="source_problem_server_error">il sito ha restituito un errore. Riprova più tardi.</string>
+    <string name="source_problem_download_failed">download non riuscito. Controlla la connessione.</string>
+    <string name="source_problem_not_a_blocklist">questo link non è una blocklist. Usa il link al file di testo grezzo.</string>
+    <string name="source_problem_too_large">questa blocklist è troppo grande.</string>
+    <string name="source_problem_over_total_limit">le tue blocklist superano nel complesso il limite di %1$s domini.</string>
+
+    <!-- Whitelist screen -->
+    <string name="whitelist_info_title">Informazioni sulla whitelist</string>
+    <string name="whitelist_info_body">Sito web — I domini in whitelist non vengono mai bloccati. Aggiungere un sito alla whitelist non consente gli annunci a cui quel sito potrebbe rimandare.\n\nApp — Le app selezionate escludono completamente la VPN e usano la normale connessione. Il traffico di tutte le altre app passa attraverso la VPN per essere filtrato.</string>
+    <string name="tab_apps">App</string>
+    <string name="whitelist_already">Già in whitelist</string>
+    <string name="whitelist_invalid">Impossibile ricavare un dominio — prova ad es. example.com</string>
+    <string name="whitelist_empty">Aggiungi un sito alla whitelist per escluderlo dal filtro.</string>
+
+    <!-- Apps tab -->
+    <string name="apps_search_hint">Cerca app…</string>
+    <string name="apps_loading">Caricamento app… Potrebbe richiedere qualche secondo.</string>
+    <string name="apps_added_to_bypass">%1$s aggiunta all\'elenco di esclusione</string>
+    <string name="apps_removed_from_bypass">%1$s rimossa dall\'elenco di esclusione</string>
+    <string name="apps_reset_defaults">Ripristina predefiniti</string>
+
+    <!-- VPN notification -->
+    <string name="notification_channel_name">Stato VPN</string>
+    <string name="notification_channel_description">Visibile mentre la VPN di Just Block è attiva</string>
+    <string name="notification_title">Just Block è attivo</string>
+    <string name="notification_text">Blocco di annunci e tracker in corso</string>
+    <string name="notification_stop">Ferma</string>
+</resources>

@@ -1,5 +1,8 @@
 package fyi.justfreesoftware.justblock.ui
 
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
+import fyi.justfreesoftware.justblock.R
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -86,6 +89,7 @@ fun AppsTab(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val bypassedApps by viewModel.bypassedApps.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -136,7 +140,7 @@ fun AppsTab(
             modifier      = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            placeholder   = { Text("Search apps…") },
+            placeholder   = { Text(stringResource(R.string.apps_search_hint)) },
             leadingIcon   = { Icon(Icons.Default.Search, contentDescription = null) },
             singleLine    = true,
             shape         = RoundedCornerShape(12.dp),
@@ -153,7 +157,7 @@ fun AppsTab(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        text  = "Loading apps... This may take a few seconds.",
+                        text  = stringResource(R.string.apps_loading),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -174,7 +178,10 @@ fun AppsTab(
                                 coroutineScope.launch {
                                     snackbarHostState.currentSnackbarData?.dismiss()
                                     snackbarHostState.showSnackbar(
-                                        message = if (checked) "${app.label} added to bypass list" else "${app.label} removed from bypass list",
+                                        message = resources.getString(
+                                            if (checked) R.string.apps_added_to_bypass else R.string.apps_removed_from_bypass,
+                                            app.label,
+                                        ),
                                         duration = SnackbarDuration.Short
                                     )
                                 }
@@ -192,7 +199,7 @@ fun AppsTab(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            Text("Reset to defaults")
+            Text(stringResource(R.string.apps_reset_defaults))
         }
     }
 }

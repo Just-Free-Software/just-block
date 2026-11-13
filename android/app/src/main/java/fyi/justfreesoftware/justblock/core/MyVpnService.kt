@@ -1,5 +1,6 @@
 package fyi.justfreesoftware.justblock.core
 
+import fyi.justfreesoftware.justblock.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -662,10 +663,10 @@ class MyVpnService : VpnService() {
     private fun buildNotification(): Notification {
         val channel = NotificationChannel(
             NOTIFICATION_CHANNEL,
-            "VPN Status",
+            getString(R.string.notification_channel_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Shows while Just Block VPN is active"
+            description = getString(R.string.notification_channel_description)
             setShowBadge(false)
         }
 
@@ -687,13 +688,13 @@ class MyVpnService : VpnService() {
         )
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL)
-            .setContentTitle("Just Block is active")
-            .setContentText("Blocking ads and trackers")
+            .setContentTitle(getString(R.string.notification_title))
+            .setContentText(getString(R.string.notification_text))
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(openAppIntent)
             .setOngoing(true)
             .setNumber(0)
-            .addAction(android.R.drawable.ic_delete, "Stop", stopIntent)
+            .addAction(android.R.drawable.ic_delete, getString(R.string.notification_stop), stopIntent)
             .build()
     }
 }

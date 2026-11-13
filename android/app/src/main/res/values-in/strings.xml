@@ -1,0 +1,105 @@
+<resources>
+    <!-- Common -->
+    <string name="ok">OK</string>
+    <string name="info">Info</string>
+    <string name="add">Tambah</string>
+    <string name="remove">Hapus</string>
+    <string name="delete">Hapus</string>
+    <string name="example_domain_hint">mis. example.com</string>
+    <string name="tab_website">Situs web</string>
+
+    <!-- Welcome dialog -->
+    <string name="welcome_title">Selamat datang!</string>
+    <string name="welcome_intro">Aplikasi ini memerlukan dua izin:</string>
+    <string name="welcome_notification_title">Izin Notifikasi</string>
+    <string name="welcome_notification_body">Memberi tahu Anda saat pemblokir aktif dan, yang lebih penting, memastikan ponsel Anda tidak menutup aplikasi di latar belakang.</string>
+    <string name="welcome_vpn_title">Izin VPN</string>
+    <string name="welcome_vpn_body">Kami menggunakan VPN lokal untuk menyaring lalu lintas jaringan Anda dan memblokir domain yang dipilih.</string>
+    <string name="welcome_dont_show_again">Jangan tampilkan lagi</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Beranda</string>
+    <string name="nav_blocking">Pemblokiran</string>
+    <string name="nav_whitelist">Daftar putih</string>
+
+    <!-- Home screen -->
+    <string name="home_info_body">VPN otomatis berjalan bersama aplikasi dan tetap aktif di latar belakang. Untuk menghentikan aplikasi sepenuhnya, tekan tombol Hentikan &amp; Tutup.\n\nAplikasi ini tidak akan berfungsi dengan baik jika DNS pribadi diaktifkan. Jika Anda belum pernah mengubah setelan Android ini, Anda tidak perlu khawatir.\n\nJika aplikasi berhenti bekerja setelah lama berjalan, mungkin penyebabnya adalah pengoptimalan baterai. Pertimbangkan untuk mengubahnya menjadi Tidak dibatasi di Setelan &gt; Aplikasi &gt; Just Block.</string>
+    <plurals name="home_blocked_sites">
+        <item quantity="other">situs diblokir</item>
+    </plurals>
+    <plurals name="home_whitelisted_sites">
+        <item quantity="other">situs di daftar putih</item>
+    </plurals>
+    <string name="home_add_rule">Tambah aturan</string>
+    <string name="home_enable_blocking">Aktifkan pemblokiran</string>
+    <string name="home_start_on_boot">Mulai saat perangkat menyala</string>
+    <string name="home_status">Status:</string>
+    <string name="home_status_on">AKTIF</string>
+    <string name="home_status_off">NONAKTIF</string>
+    <string name="home_blocklists_updating">(memperbarui daftar blokir…)</string>
+    <string name="home_blocklists_error">(⚠ gagal memperbarui daftar blokir)</string>
+    <string name="home_stop_and_close">Hentikan &amp; Tutup</string>
+    <string name="home_link_website">SITUS WEB</string>
+    <string name="home_link_privacy">PRIVASI</string>
+    <string name="theme_light">Terang</string>
+    <string name="theme_dark">Gelap</string>
+    <string name="theme_dynamic">Dinamis</string>
+
+    <!-- Blocking screen -->
+    <string name="blocking_info_title">Info Pemblokiran</string>
+    <string name="blocking_info_body">Situs web — Situs yang Anda tambahkan di sini langsung diblokir, apa pun daftar blokir yang Anda gunakan. Anda dapat menjeda pemblokiran situs atau menghapusnya sepenuhnya.\n\nDaftar blokir — Kami menggunakan server DNS AdGuard (dengan Cloudflare dan Google sebagai cadangan otomatis), yang secara default memblokir sebagian besar iklan. Anda juga dapat menambahkan URL daftar blokir sendiri di sini.</string>
+    <string name="tab_blocklists">Daftar blokir</string>
+
+    <!-- Manual (website) block tab -->
+    <string name="manual_empty">Tambahkan situs web di sini untuk memblokirnya.</string>
+    <string name="manual_invalid">Tidak diblokir: ini bukan situs web yang valid. Masukkan domain seperti example.com.</string>
+    <string name="pause_15_minutes">15 menit</string>
+    <string name="pause_1_hour">1 jam</string>
+    <string name="pause_1_day">1 hari</string>
+    <string name="pause_indefinitely">Tanpa batas waktu</string>
+    <string name="paused_indefinitely">dijeda tanpa batas waktu</string>
+    <string name="paused_with_remaining">dijeda · %1$s</string>
+    <string name="remaining_under_minute">sisa &lt;1 mnt</string>
+    <string name="remaining_minutes">sisa %1$d mnt</string>
+    <string name="remaining_hours">sisa %1$d jam</string>
+    <string name="remaining_days">sisa %1$d hari</string>
+    <string name="resume">Lanjutkan</string>
+    <string name="pause">Jeda</string>
+    <string name="collapse_menu">Ciutkan menu</string>
+    <string name="expand_menu">Luaskan menu</string>
+
+    <!-- Blocklists tab -->
+    <string name="blocklists_empty">Tautkan daftar blokir untuk memblokir sekelompok situs web.</string>
+    <string name="source_issue_using_saved_copy">Gagal memperbarui, menggunakan salinan unduhan terakhir: %1$s</string>
+    <string name="source_issue_not_loaded">Tidak dimuat: %1$s</string>
+    <string name="source_problem_invalid_link">ini bukan tautan https:// yang valid.</string>
+    <string name="source_problem_site_not_found">situs ini tidak ada, atau Anda sedang offline.</string>
+    <string name="source_problem_page_not_found">tidak ada apa pun di tautan ini.</string>
+    <string name="source_problem_server_error">situs mengembalikan error. Coba lagi nanti.</string>
+    <string name="source_problem_download_failed">unduhan gagal. Periksa koneksi Anda.</string>
+    <string name="source_problem_not_a_blocklist">tautan ini bukan daftar blokir. Tautkan ke file teks mentahnya.</string>
+    <string name="source_problem_too_large">daftar blokir ini terlalu besar.</string>
+    <string name="source_problem_over_total_limit">total daftar blokir Anda melebihi batas %1$s domain.</string>
+
+    <!-- Whitelist screen -->
+    <string name="whitelist_info_title">Info Daftar Putih</string>
+    <string name="whitelist_info_body">Situs web — Domain di daftar putih tidak pernah diblokir. Memasukkan situs ke daftar putih tidak ikut mengizinkan iklan yang mungkin ditautkan oleh situs tersebut.\n\nAplikasi — Aplikasi yang dipilih sepenuhnya melewati VPN dan menggunakan koneksi normal Anda. Lalu lintas semua aplikasi lain akan dialihkan melalui VPN untuk disaring.</string>
+    <string name="tab_apps">Aplikasi</string>
+    <string name="whitelist_already">Sudah ada di daftar putih</string>
+    <string name="whitelist_invalid">Tidak dapat membaca domain dari input itu — coba mis. example.com</string>
+    <string name="whitelist_empty">Masukkan situs ke daftar putih agar tidak disaring.</string>
+
+    <!-- Apps tab -->
+    <string name="apps_search_hint">Cari aplikasi…</string>
+    <string name="apps_loading">Memuat aplikasi… Mungkin perlu beberapa detik.</string>
+    <string name="apps_added_to_bypass">%1$s ditambahkan ke daftar pengecualian</string>
+    <string name="apps_removed_from_bypass">%1$s dihapus dari daftar pengecualian</string>
+    <string name="apps_reset_defaults">Kembalikan ke default</string>
+
+    <!-- VPN notification -->
+    <string name="notification_channel_name">Status VPN</string>
+    <string name="notification_channel_description">Ditampilkan saat VPN Just Block aktif</string>
+    <string name="notification_title">Just Block aktif</string>
+    <string name="notification_text">Memblokir iklan dan pelacak</string>
+    <string name="notification_stop">Hentikan</string>
+</resources>

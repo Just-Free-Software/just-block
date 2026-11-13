@@ -1,5 +1,6 @@
 package fyi.justfreesoftware.justblock
 
+import androidx.compose.ui.res.stringResource
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
@@ -118,7 +119,7 @@ class MainActivity : ComponentActivity() {
                     },
                     title = {
                         Text(
-                            text = "Welcome!",
+                            text = stringResource(R.string.welcome_title),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -126,29 +127,29 @@ class MainActivity : ComponentActivity() {
                     text = {
                         Column {
                             Text(
-                                "This app requires two permissions:",
+                                stringResource(R.string.welcome_intro),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             
                             Text(
-                                "Notification Permission",
+                                stringResource(R.string.welcome_notification_title),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "This notifies you when the blocker is active and more importantly, ensures that you phone doesn't kill the app in the background.",
+                                stringResource(R.string.welcome_notification_body),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             
                             Text(
-                                "VPN Permission",
+                                stringResource(R.string.welcome_vpn_title),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "We use a local VPN to filter your network traffic and block selected domains.",
+                                stringResource(R.string.welcome_vpn_body),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             
@@ -161,7 +162,7 @@ class MainActivity : ComponentActivity() {
                                     checked = dontShowAgain,
                                     onCheckedChange = { dontShowAgain = it }
                                 )
-                                Text("Don't show again", style = MaterialTheme.typography.bodyMedium)
+                                Text(stringResource(R.string.welcome_dont_show_again), style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     },
@@ -174,7 +175,7 @@ class MainActivity : ComponentActivity() {
                             permissionsRequested = true
                             checkAndRequestPermissions()
                         }) {
-                            Text("OK")
+                            Text(stringResource(R.string.ok))
                         }
                     }
                 )
@@ -188,20 +189,20 @@ class MainActivity : ComponentActivity() {
                             NavigationBarItem(
                                 selected = selectedTab == 0,
                                 onClick  = { selectedTab = 0 },
-                                icon     = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                                label    = { Text("Home") },
+                                icon     = { Icon(Icons.Default.Home, contentDescription = null) },
+                                label    = { Text(stringResource(R.string.nav_home)) },
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 1,
                                 onClick  = { selectedTab = 1 },
-                                icon     = { Icon(Icons.Default.Block, contentDescription = "Blocking") },
-                                label    = { Text("Blocking") },
+                                icon     = { Icon(Icons.Default.Block, contentDescription = null) },
+                                label    = { Text(stringResource(R.string.nav_blocking)) },
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 2,
                                 onClick  = { selectedTab = 2 },
-                                icon     = { Icon(Icons.Default.VerifiedUser, contentDescription = "") },
-                                label    = { Text("Whitelist") },
+                                icon     = { Icon(Icons.Default.VerifiedUser, contentDescription = null) },
+                                label    = { Text(stringResource(R.string.nav_whitelist)) },
                             )
                         }
                     }
