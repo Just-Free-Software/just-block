@@ -1,5 +1,8 @@
 package fyi.justfreesoftware.justblock.ui
 
+import java.text.NumberFormat
+import androidx.compose.ui.res.stringResource
+import fyi.justfreesoftware.justblock.R
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -56,7 +59,7 @@ fun BlocklistsTab(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text  = "Link to a blocklist to block groups of websites.",
+                    text  = stringResource(R.string.blocklists_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -86,27 +89,23 @@ fun BlocklistsTab(
     }
 }
 
-private fun SourceIssue.message(): String {
-    val prefix = if (usingSavedCopy) "Couldn't update, using the last downloaded copy: " else "Not loaded: "
-    return prefix + problem.reason()
-}
+@Composable
+private fun SourceIssue.message(): String = stringResource(
+    if (usingSavedCopy) R.string.source_issue_using_saved_copy else R.string.source_issue_not_loaded,
+    problem.reason(),
+)
 
+@Composable
 private fun SourceProblem.reason(): String = when (this) {
-    SourceProblem.INVALID_LINK ->
-        "this isn't a valid https:// link."
-    SourceProblem.SITE_NOT_FOUND ->
-        "this site doesn't exist, or you're offline."
-    SourceProblem.PAGE_NOT_FOUND ->
-        "nothing exists at this link."
-    SourceProblem.SERVER_ERROR ->
-        "the site returned an error. Try again later."
-    SourceProblem.DOWNLOAD_FAILED ->
-        "the download failed. Check your connection."
-    SourceProblem.NOT_A_BLOCKLIST ->
-        "this link isn't a blocklist. Link to the raw text file."
-    SourceProblem.TOO_LARGE ->
-        "this blocklist is too large."
-    SourceProblem.OVER_TOTAL_LIMIT ->
-        "your blocklists together are over the " +
-            "%,d domain limit.".format(BlocklistFetcher.MAX_DOMAINS)
+    SourceProblem.INVALID_LINK     -> stringResource(R.string.source_problem_invalid_link)
+    SourceProblem.SITE_NOT_FOUND   -> stringResource(R.string.source_problem_site_not_found)
+    SourceProblem.PAGE_NOT_FOUND   -> stringResource(R.string.source_problem_page_not_found)
+    SourceProblem.SERVER_ERROR     -> stringResource(R.string.source_problem_server_error)
+    SourceProblem.DOWNLOAD_FAILED  -> stringResource(R.string.source_problem_download_failed)
+    SourceProblem.NOT_A_BLOCKLIST  -> stringResource(R.string.source_problem_not_a_blocklist)
+    SourceProblem.TOO_LARGE        -> stringResource(R.string.source_problem_too_large)
+    SourceProblem.OVER_TOTAL_LIMIT -> stringResource(
+        R.string.source_problem_over_total_limit,
+        NumberFormat.getIntegerInstance().format(BlocklistFetcher.MAX_DOMAINS),
+    )
 }

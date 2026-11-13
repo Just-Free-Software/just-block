@@ -1,5 +1,7 @@
 package fyi.justfreesoftware.justblock.ui
 
+import androidx.compose.ui.res.stringResource
+import fyi.justfreesoftware.justblock.R
 import fyi.justfreesoftware.justblock.ui.theme.HeaderTextStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -62,16 +64,12 @@ fun BlockingScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Blocking Info",
+                        text = stringResource(R.string.blocking_info_title),
                         style = MaterialTheme.typography.titleLarge
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = """
-                            Website — Websites you add here are blocked right away, no matter which blocklists you use. You can pause blocking for a site or remove it entirely.
-
-                            Blocklists — We use AdGuard's DNS servers (with Cloudflare and Google as automatic fallbacks), which blocks most ads by default. You can also add your own blocklist URLs here.
-                        """.trimIndent(),
+                        text = stringResource(R.string.blocking_info_body),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -80,7 +78,7 @@ fun BlockingScreen(
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(onClick = { showInfoDialog = false }) {
-                            Text("OK")
+                            Text(stringResource(R.string.ok))
                         }
                     }
                 }
@@ -101,7 +99,7 @@ fun BlockingScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text  = "Blocking",
+                    text  = stringResource(R.string.nav_blocking),
                     style = HeaderTextStyle,
                 )
                 Spacer(Modifier.weight(1f))
@@ -111,7 +109,7 @@ fun BlockingScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Info,
-                        contentDescription = "Info",
+                        contentDescription = stringResource(R.string.info),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(40.dp)
                     )
@@ -125,7 +123,7 @@ fun BlockingScreen(
                     onClick  = { selectedTab = 0 },
                     text = {
                         Text(
-                            "Website",
+                            stringResource(R.string.tab_website),
                             style = MaterialTheme.typography.labelLarge
                         )
                     },
@@ -135,7 +133,7 @@ fun BlockingScreen(
                     onClick  = { selectedTab = 1 },
                     text = {
                         Text(
-                            "Blocklists",
+                            stringResource(R.string.tab_blocklists),
                             style = MaterialTheme.typography.labelLarge
                         )
                     },
@@ -204,7 +202,7 @@ internal fun DomainInputRow(
         ) {
             Icon(
                 Icons.Default.Add,
-                contentDescription = "Add",
+                contentDescription = stringResource(R.string.add),
             )
         }
     }
@@ -226,7 +224,7 @@ internal fun DomainRow(label: String, onDelete: () -> Unit) {
         IconButton(onClick = onDelete) {
             Icon(
                 Icons.Default.Delete,
-                contentDescription = "Remove",
+                contentDescription = stringResource(R.string.remove),
             )
         }
     }

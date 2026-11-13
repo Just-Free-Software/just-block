@@ -1,0 +1,109 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Common -->
+    <string name="ok">ठीक है</string>
+    <string name="info">जानकारी</string>
+    <string name="add">जोड़ें</string>
+    <string name="remove">हटाएं</string>
+    <string name="delete">मिटाएं</string>
+    <string name="example_domain_hint">जैसे example.com</string>
+    <string name="tab_website">वेबसाइट</string>
+
+    <!-- Welcome dialog -->
+    <string name="welcome_title">स्वागत है!</string>
+    <string name="welcome_intro">इस ऐप को दो अनुमतियों की ज़रूरत है:</string>
+    <string name="welcome_notification_title">सूचना की अनुमति</string>
+    <string name="welcome_notification_body">यह आपको बताती है कि ब्लॉकर चालू है, और सबसे ज़रूरी, यह पक्का करती है कि आपका फ़ोन बैकग्राउंड में ऐप को बंद न करे।</string>
+    <string name="welcome_vpn_title">VPN की अनुमति</string>
+    <string name="welcome_vpn_body">हम आपके नेटवर्क ट्रैफ़िक को फ़िल्टर करने और चुने गए डोमेन ब्लॉक करने के लिए एक लोकल VPN का इस्तेमाल करते हैं।</string>
+    <string name="welcome_dont_show_again">फिर से न दिखाएं</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">होम</string>
+    <string name="nav_blocking">ब्लॉकिंग</string>
+    <string name="nav_whitelist">व्हाइटलिस्ट</string>
+
+    <!-- Home screen -->
+    <string name="home_info_body">VPN ऐप के साथ अपने आप शुरू होता है और बैकग्राउंड में चलता रहता है। ऐप को पूरी तरह बंद करने के लिए, \"रोकें और बंद करें\" बटन दबाएं।\n\nप्राइवेट DNS चालू होने पर यह ऐप ठीक से काम नहीं करेगा। अगर आपने पहले कभी यह Android सेटिंग नहीं बदली है, तो आपको चिंता करने की ज़रूरत नहीं है।\n\nअगर ऐप लंबे समय बाद काम करना बंद कर दे, तो इसकी वजह बैटरी ऑप्टिमाइज़ेशन हो सकती है। इसे सेटिंग &gt; ऐप्लिकेशन &gt; Just Block में जाकर \"पाबंदी नहीं है\" पर सेट करें।</string>
+    <!-- The count is shown separately above this label, and the singular is correct for 0 here. -->
+    <plurals name="home_blocked_sites" tools:ignore="ImpliedQuantity">
+        <item quantity="one">ब्लॉक की गई साइट</item>
+        <item quantity="other">ब्लॉक की गई साइटें</item>
+    </plurals>
+    <!-- The count is shown separately above this label, and the singular is correct for 0 here. -->
+    <plurals name="home_whitelisted_sites" tools:ignore="ImpliedQuantity">
+        <item quantity="one">व्हाइटलिस्ट की गई साइट</item>
+        <item quantity="other">व्हाइटलिस्ट की गई साइटें</item>
+    </plurals>
+    <string name="home_add_rule">नियम जोड़ें</string>
+    <string name="home_enable_blocking">ब्लॉकिंग चालू करें</string>
+    <string name="home_start_on_boot">फ़ोन चालू होने पर शुरू करें</string>
+    <string name="home_status">स्थिति:</string>
+    <string name="home_status_on">चालू</string>
+    <string name="home_status_off">बंद</string>
+    <string name="home_blocklists_updating">(ब्लॉकलिस्ट अपडेट हो रही हैं…)</string>
+    <string name="home_blocklists_error">(⚠ ब्लॉकलिस्ट अपडेट करने में गड़बड़ी)</string>
+    <string name="home_stop_and_close">रोकें और बंद करें</string>
+    <string name="home_link_website">वेबसाइट</string>
+    <string name="home_link_privacy">निजता</string>
+    <string name="theme_light">लाइट</string>
+    <string name="theme_dark">डार्क</string>
+    <string name="theme_dynamic">डायनैमिक</string>
+
+    <!-- Blocking screen -->
+    <string name="blocking_info_title">ब्लॉकिंग की जानकारी</string>
+    <string name="blocking_info_body">वेबसाइट — यहां जोड़ी गई वेबसाइटें तुरंत ब्लॉक हो जाती हैं, चाहे आप कोई भी ब्लॉकलिस्ट इस्तेमाल करें। आप किसी साइट की ब्लॉकिंग रोक सकते हैं या उसे पूरी तरह हटा सकते हैं।\n\nब्लॉकलिस्ट — हम AdGuard के DNS सर्वर इस्तेमाल करते हैं (Cloudflare और Google अपने आप बैकअप के रूप में काम करते हैं), जो डिफ़ॉल्ट रूप से ज़्यादातर विज्ञापन ब्लॉक करते हैं। आप यहां अपनी ब्लॉकलिस्ट के URL भी जोड़ सकते हैं।</string>
+    <string name="tab_blocklists">ब्लॉकलिस्ट</string>
+
+    <!-- Manual (website) block tab -->
+    <string name="manual_empty">किसी वेबसाइट को ब्लॉक करने के लिए उसे यहां जोड़ें।</string>
+    <string name="manual_invalid">ब्लॉक नहीं हुई: यह मान्य वेबसाइट नहीं है। example.com जैसा डोमेन डालें।</string>
+    <string name="pause_15_minutes">15 मिनट</string>
+    <string name="pause_1_hour">1 घंटा</string>
+    <string name="pause_1_day">1 दिन</string>
+    <string name="pause_indefinitely">अनिश्चित समय तक</string>
+    <string name="paused_indefinitely">अनिश्चित समय तक रुका हुआ</string>
+    <string name="paused_with_remaining">रुका हुआ · %1$s</string>
+    <string name="remaining_under_minute">&lt;1 मिनट बाकी</string>
+    <string name="remaining_minutes">%1$d मिनट बाकी</string>
+    <string name="remaining_hours">%1$d घंटे बाकी</string>
+    <string name="remaining_days">%1$d दिन बाकी</string>
+    <string name="resume">फिर से शुरू करें</string>
+    <string name="pause">रोकें</string>
+    <string name="collapse_menu">मेन्यू छोटा करें</string>
+    <string name="expand_menu">मेन्यू बड़ा करें</string>
+
+    <!-- Blocklists tab -->
+    <string name="blocklists_empty">वेबसाइटों के समूह ब्लॉक करने के लिए किसी ब्लॉकलिस्ट का लिंक जोड़ें।</string>
+    <string name="source_issue_using_saved_copy">अपडेट नहीं हो सकी, पिछली डाउनलोड की गई कॉपी इस्तेमाल हो रही है: %1$s</string>
+    <string name="source_issue_not_loaded">लोड नहीं हुई: %1$s</string>
+    <string name="source_problem_invalid_link">यह मान्य https:// लिंक नहीं है।</string>
+    <string name="source_problem_site_not_found">यह साइट मौजूद नहीं है, या आप ऑफ़लाइन हैं।</string>
+    <string name="source_problem_page_not_found">इस लिंक पर कुछ भी नहीं है।</string>
+    <string name="source_problem_server_error">साइट ने गड़बड़ी लौटाई। बाद में फिर से कोशिश करें।</string>
+    <string name="source_problem_download_failed">डाउनलोड नहीं हो सका। अपना कनेक्शन जांचें।</string>
+    <string name="source_problem_not_a_blocklist">यह लिंक ब्लॉकलिस्ट नहीं है। रॉ टेक्स्ट फ़ाइल का लिंक दें।</string>
+    <string name="source_problem_too_large">यह ब्लॉकलिस्ट बहुत बड़ी है।</string>
+    <string name="source_problem_over_total_limit">आपकी सभी ब्लॉकलिस्ट मिलाकर %1$s डोमेन की सीमा से ज़्यादा हैं।</string>
+
+    <!-- Whitelist screen -->
+    <string name="whitelist_info_title">व्हाइटलिस्ट की जानकारी</string>
+    <string name="whitelist_info_body">वेबसाइट — व्हाइटलिस्ट किए गए डोमेन कभी ब्लॉक नहीं होते। किसी साइट को व्हाइटलिस्ट करने से उस साइट पर लिंक किए गए विज्ञापन व्हाइटलिस्ट नहीं होते।\n\nऐप्लिकेशन — चुने गए ऐप्लिकेशन VPN को पूरी तरह छोड़कर आपका सामान्य कनेक्शन इस्तेमाल करते हैं। बाकी सभी ऐप्लिकेशन का ट्रैफ़िक फ़िल्टर करने के लिए VPN से होकर जाता है।</string>
+    <string name="tab_apps">ऐप्लिकेशन</string>
+    <string name="whitelist_already">पहले से व्हाइटलिस्ट में है</string>
+    <string name="whitelist_invalid">इसमें से डोमेन नहीं पढ़ा जा सका — जैसे example.com आज़माएं</string>
+    <string name="whitelist_empty">किसी साइट को फ़िल्टरिंग से बाहर रखने के लिए उसे व्हाइटलिस्ट करें।</string>
+
+    <!-- Apps tab -->
+    <string name="apps_search_hint">ऐप्लिकेशन खोजें…</string>
+    <string name="apps_loading">ऐप्लिकेशन लोड हो रहे हैं… इसमें कुछ सेकंड लग सकते हैं।</string>
+    <string name="apps_added_to_bypass">%1$s को बायपास सूची में जोड़ा गया</string>
+    <string name="apps_removed_from_bypass">%1$s को बायपास सूची से हटाया गया</string>
+    <string name="apps_reset_defaults">डिफ़ॉल्ट पर रीसेट करें</string>
+
+    <!-- VPN notification -->
+    <string name="notification_channel_name">VPN की स्थिति</string>
+    <string name="notification_channel_description">Just Block VPN चालू होने पर दिखती है</string>
+    <string name="notification_title">Just Block चालू है</string>
+    <string name="notification_text">विज्ञापन और ट्रैकर ब्लॉक हो रहे हैं</string>
+    <string name="notification_stop">रोकें</string>
+</resources>

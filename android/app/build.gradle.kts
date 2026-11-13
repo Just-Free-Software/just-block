@@ -38,6 +38,12 @@ android {
     buildFeatures {
         compose = true
     }
+    androidResources {
+        // Builds the locale list from res/values-*/ so each translation shows up
+        // in the system's per-app language settings. Default locale is set in
+        // res/resources.properties.
+        generateLocaleConfig = true
+    }
     externalNativeBuild {
         cmake {
             path("CMakeLists.txt")

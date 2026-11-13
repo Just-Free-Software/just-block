@@ -1,5 +1,8 @@
 package fyi.justfreesoftware.justblock.ui
 
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import fyi.justfreesoftware.justblock.R
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -76,13 +79,7 @@ fun HomeScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = """
-                            The VPN automatically starts with the app and runs in the background. To stop the app completely, press the Stop VPN & Close button.
-                            
-                            This app will not work properly with private DNS enabled. If you have not touched this Android setting before, you don't need to worry about this.
-                            
-                            If the app stops working after long periods it could be due to battery optimization. Consider changing this under Settings > Apps > Just Block to Unrestricted.
-                        """.trimIndent(),
+                        text = stringResource(R.string.home_info_body),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -91,7 +88,7 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.End
                     ) {
                         androidx.compose.material3.TextButton(onClick = { showInfoDialog = false }) {
-                            Text("OK")
+                            Text(stringResource(R.string.ok))
                         }
                     }
                 }
@@ -120,7 +117,7 @@ fun HomeScreen(
                         .padding(start = 8.dp, end = 8.dp, top = 16.dp, bottom = 8.dp)
                 ) {
                     Text(
-                        text = "Just Block",
+                        text = stringResource(R.string.app_name),
                         style = HeaderTextStyle
                     )
                     Spacer(Modifier.weight(1f))
@@ -130,7 +127,7 @@ fun HomeScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Info,
-                            contentDescription = "Info",
+                            contentDescription = stringResource(R.string.info),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(40.dp)
                         )
@@ -164,15 +161,13 @@ fun HomeScreen(
                             modifier             = Modifier.fillMaxWidth(),
                         ) {
                             BlockingRulesBox(
-                                label = if (manualBlocked.size == 1) "blocked site"
-                                        else "blocked sites",
+                                label = pluralStringResource(R.plurals.home_blocked_sites, manualBlocked.size),
                                 count = manualBlocked.size,
                                 modifier = Modifier.weight(1f),
                                 onClick = onOpenBlockingRules,
                             )
                             BlockingRulesBox(
-                                label = if (whitelisted.size == 1) "whitelisted site"
-                                        else "whitelisted sites",
+                                label = pluralStringResource(R.plurals.home_whitelisted_sites, whitelisted.size),
                                 count = whitelisted.size,
                                 modifier = Modifier.weight(1f),
                                 onClick = onOpenWhitelist,
@@ -183,7 +178,7 @@ fun HomeScreen(
                             onClick = onOpenBlockingRules,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Add a rule")
+                            Text(stringResource(R.string.home_add_rule))
                         }
                     }
                 }
@@ -206,7 +201,7 @@ fun HomeScreen(
                                     selected = mode == themeMode,
                                     icon = {} // text only
                                 ) {
-                                    Text(mode.name)
+                                    Text(stringResource(mode.labelRes))
                                 }
                             }
                         }
@@ -283,7 +278,7 @@ private fun VpnStatusCard(
                 modifier              = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text  = "Enable blocking",
+                    text  = stringResource(R.string.home_enable_blocking),
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Switch(
@@ -303,7 +298,7 @@ private fun VpnStatusCard(
                 modifier              = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text  = "Start on boot",
+                    text  = stringResource(R.string.home_start_on_boot),
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Switch(
@@ -325,7 +320,7 @@ private fun VpnStatusCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Status:",
+                        text = stringResource(R.string.home_status),
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Spacer(Modifier.width(8.dp))
@@ -335,23 +330,23 @@ private fun VpnStatusCard(
                     }
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = if (isVpnEnabled) "ON" else "OFF",
+                        text = stringResource(if (isVpnEnabled) R.string.home_status_on else R.string.home_status_off),
                         style = MaterialTheme.typography.bodyLarge,
                         color = dotColor,
                     )
                     
-                    val blocklistText = if (hasCustomUrls) {
+                    val blocklistTextRes = if (hasCustomUrls) {
                         when (blocklistState) {
-                            is BlocklistState.Loading -> " (updating blocklists…)"
-                            is BlocklistState.Error   -> " (⚠ error updating blocklists)"
-                            else                      -> ""
+                            is BlocklistState.Loading -> R.string.home_blocklists_updating
+                            is BlocklistState.Error   -> R.string.home_blocklists_error
+                            else                      -> null
                         }
                     } else {
-                        ""
+                        null
                     }
-                    if (blocklistText.isNotEmpty()) {
+                    if (blocklistTextRes != null) {
                         Text(
-                            text = blocklistText,
+                            text = " " + stringResource(blocklistTextRes),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -363,7 +358,7 @@ private fun VpnStatusCard(
                 Button(
                     onClick = onCloseApp,
                 ) {
-                    Text("Stop & Close")
+                    Text(stringResource(R.string.home_stop_and_close))
                 }
             }
 
@@ -379,7 +374,7 @@ private fun VpnStatusCard(
             ) {
                 val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
                 Text(
-                    text = "WEBSITE",
+                    text = stringResource(R.string.home_link_website),
                     style = MaterialTheme.typography.labelSmall.copy(
                         textDecoration = TextDecoration.Underline
                     ),
@@ -389,7 +384,7 @@ private fun VpnStatusCard(
                         .padding(4.dp),
                 )
                 Text(
-                    text = "PRIVACY",
+                    text = stringResource(R.string.home_link_privacy),
                     style = MaterialTheme.typography.labelSmall.copy(
                         textDecoration = TextDecoration.Underline
                     ),
@@ -402,3 +397,10 @@ private fun VpnStatusCard(
         }
     }
 }
+
+private val ThemeMode.labelRes: Int
+    get() = when (this) {
+        ThemeMode.Light   -> R.string.theme_light
+        ThemeMode.Dark    -> R.string.theme_dark
+        ThemeMode.Dynamic -> R.string.theme_dynamic
+    }

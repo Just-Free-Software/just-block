@@ -1,5 +1,8 @@
 package fyi.justfreesoftware.justblock.ui
 
+import androidx.annotation.StringRes
+import androidx.compose.ui.res.stringResource
+import fyi.justfreesoftware.justblock.R
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -67,7 +70,7 @@ fun ManualTab(
     ) {
         // ── Add field ─────────────────────────────────────────────────────
         DomainInputRow(
-            placeholder = "e.g. example.com",
+            placeholder = stringResource(R.string.example_domain_hint),
             onAdd       = { viewModel.addManualBlockedDomain(it) },
             modifier    = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
@@ -89,7 +92,7 @@ fun ManualTab(
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text  = "Add a website here to block it.",
+                    text  = stringResource(R.string.manual_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -109,7 +112,7 @@ fun ManualTab(
                         )
                         if (!viewModel.isValidManualBlock(domain)) {
                             Text(
-                                text  = "Not blocked: this isn't a valid website. Enter a domain like example.com.",
+                                text  = stringResource(R.string.manual_invalid),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.padding(start = 12.dp, bottom = 8.dp),
@@ -127,26 +130,27 @@ fun ManualTab(
 /**
  * Pause duration choices exposed in the split-button dropdown.
  */
-private data class PauseDuration(val label: String, val millis: Long?)
+private data class PauseDuration(@StringRes val labelRes: Int, val millis: Long?)
 
 private val PAUSE_DURATIONS = listOf(
-    PauseDuration("15 minutes",  15 * 60 * 1_000L),
-    PauseDuration("1 hour",      60 * 60 * 1_000L),
-    PauseDuration("1 day",       24 * 60 * 60 * 1_000L),
-    PauseDuration("Indefinitely", null),
+    PauseDuration(R.string.pause_15_minutes,   15 * 60 * 1_000L),
+    PauseDuration(R.string.pause_1_hour,       60 * 60 * 1_000L),
+    PauseDuration(R.string.pause_1_day,        24 * 60 * 60 * 1_000L),
+    PauseDuration(R.string.pause_indefinitely, null),
 )
 
 /**
  * Formats a remaining-time in millis into a compact human string.
  * e.g. "14m left", "23h left", "<1m left"
  */
+@Composable
 private fun formatRemaining(remainingMs: Long): String {
     val totalMinutes = remainingMs / 60_000
     return when {
-        totalMinutes < 1   -> "<1m left"
-        totalMinutes < 60  -> "${totalMinutes}m left"
-        totalMinutes < 1440 -> "${totalMinutes / 60}h left"
-        else               -> "${totalMinutes / 1440}d left"
+        totalMinutes < 1    -> stringResource(R.string.remaining_under_minute)
+        totalMinutes < 60   -> stringResource(R.string.remaining_minutes, totalMinutes)
+        totalMinutes < 1440 -> stringResource(R.string.remaining_hours, totalMinutes / 60)
+        else                -> stringResource(R.string.remaining_days, totalMinutes / 1440)
     }
 }
 
@@ -175,8 +179,8 @@ private fun BlockedDomainRow(
 
     val subtitle = when {
         !isPaused                  -> null
-        expiresAt == Long.MAX_VALUE -> "paused indefinitely"
-        else                       -> "paused · ${formatRemaining(expiresAt - now)}"
+        expiresAt == Long.MAX_VALUE -> stringResource(R.string.paused_indefinitely)
+        else                       -> stringResource(R.string.paused_with_remaining, formatRemaining(expiresAt - now))
     }
 
     Row(
@@ -219,7 +223,7 @@ private fun BlockedDomainRow(
                 ) {
                     Icon(
                         imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                        contentDescription = if (isPaused) "Resume" else "Pause",
+                        contentDescription = stringResource(if (isPaused) R.string.resume else R.string.pause),
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -237,7 +241,7 @@ private fun BlockedDomainRow(
                     )
                     Icon(
                         imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = if (menuExpanded) "Collapse menu" else "Expand menu",
+                        contentDescription = stringResource(if (menuExpanded) R.string.collapse_menu else R.string.expand_menu),
                         modifier = Modifier
                             .size(SplitButtonDefaults.TrailingIconSize)
                             .graphicsLayer { rotationZ = rotation },
@@ -255,7 +259,7 @@ private fun BlockedDomainRow(
         ) {
             PAUSE_DURATIONS.forEach { duration ->
                 DropdownMenuItem(
-                    text    = { Text(duration.label, style = MaterialTheme.typography.bodyLarge) },
+                    text    = { Text(stringResource(duration.labelRes), style = MaterialTheme.typography.bodyLarge) },
                     onClick = {
                         menuExpanded = false
                         onPause(duration.millis)
@@ -271,7 +275,7 @@ private fun BlockedDomainRow(
             }
             HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             DropdownMenuItem(
-                text = { Text("Delete", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) },
+                text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) },
                 onClick = {
                     menuExpanded = false
                     onDelete()
@@ -279,7 +283,7 @@ private fun BlockedDomainRow(
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
+                        contentDescription = null,
                         tint = MaterialTheme.colorScheme.error
                     )
                 }

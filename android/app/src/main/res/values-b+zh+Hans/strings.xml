@@ -1,0 +1,105 @@
+<resources>
+    <!-- Common -->
+    <string name="ok">确定</string>
+    <string name="info">说明</string>
+    <string name="add">添加</string>
+    <string name="remove">移除</string>
+    <string name="delete">删除</string>
+    <string name="example_domain_hint">例如 example.com</string>
+    <string name="tab_website">网站</string>
+
+    <!-- Welcome dialog -->
+    <string name="welcome_title">欢迎！</string>
+    <string name="welcome_intro">本应用需要两项权限：</string>
+    <string name="welcome_notification_title">通知权限</string>
+    <string name="welcome_notification_body">在拦截器运行时通知你，更重要的是，可以防止手机在后台关闭本应用。</string>
+    <string name="welcome_vpn_title">VPN 权限</string>
+    <string name="welcome_vpn_body">我们使用本地 VPN 过滤你的网络流量并拦截所选域名。</string>
+    <string name="welcome_dont_show_again">不再显示</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">首页</string>
+    <string name="nav_blocking">拦截</string>
+    <string name="nav_whitelist">白名单</string>
+
+    <!-- Home screen -->
+    <string name="home_info_body">VPN 会随应用自动启动并在后台运行。如需完全停止应用，请按“停止并关闭”按钮。\n\n开启私人 DNS 时本应用无法正常工作。如果你从未更改过这项 Android 设置，则无需担心。\n\n如果应用在长时间运行后停止工作，可能是电池优化导致的。可以在“设置 &gt; 应用 &gt; Just Block”中将其改为“不受限制”。</string>
+    <plurals name="home_blocked_sites">
+        <item quantity="other">已拦截网站</item>
+    </plurals>
+    <plurals name="home_whitelisted_sites">
+        <item quantity="other">白名单网站</item>
+    </plurals>
+    <string name="home_add_rule">添加规则</string>
+    <string name="home_enable_blocking">启用拦截</string>
+    <string name="home_start_on_boot">开机启动</string>
+    <string name="home_status">状态：</string>
+    <string name="home_status_on">开启</string>
+    <string name="home_status_off">关闭</string>
+    <string name="home_blocklists_updating">（正在更新拦截列表…）</string>
+    <string name="home_blocklists_error">（⚠ 拦截列表更新失败）</string>
+    <string name="home_stop_and_close">停止并关闭</string>
+    <string name="home_link_website">官网</string>
+    <string name="home_link_privacy">隐私政策</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
+    <string name="theme_dynamic">动态</string>
+
+    <!-- Blocking screen -->
+    <string name="blocking_info_title">拦截说明</string>
+    <string name="blocking_info_body">网站 — 你在这里添加的网站会立即被拦截，与使用哪些拦截列表无关。你可以暂停对某个网站的拦截，或将其完全移除。\n\n拦截列表 — 我们使用 AdGuard 的 DNS 服务器（Cloudflare 和 Google 作为自动备用），默认即可拦截大部分广告。你也可以在这里添加自己的拦截列表链接。</string>
+    <string name="tab_blocklists">拦截列表</string>
+
+    <!-- Manual (website) block tab -->
+    <string name="manual_empty">在此添加网站即可拦截。</string>
+    <string name="manual_invalid">未拦截：这不是有效的网站。请输入类似 example.com 的域名。</string>
+    <string name="pause_15_minutes">15 分钟</string>
+    <string name="pause_1_hour">1 小时</string>
+    <string name="pause_1_day">1 天</string>
+    <string name="pause_indefinitely">无限期</string>
+    <string name="paused_indefinitely">已无限期暂停</string>
+    <string name="paused_with_remaining">已暂停 · %1$s</string>
+    <string name="remaining_under_minute">剩余不到 1 分钟</string>
+    <string name="remaining_minutes">剩余 %1$d 分钟</string>
+    <string name="remaining_hours">剩余 %1$d 小时</string>
+    <string name="remaining_days">剩余 %1$d 天</string>
+    <string name="resume">恢复</string>
+    <string name="pause">暂停</string>
+    <string name="collapse_menu">收起菜单</string>
+    <string name="expand_menu">展开菜单</string>
+
+    <!-- Blocklists tab -->
+    <string name="blocklists_empty">添加拦截列表链接，即可批量拦截网站。</string>
+    <string name="source_issue_using_saved_copy">无法更新，正在使用上次下载的副本：%1$s</string>
+    <string name="source_issue_not_loaded">未加载：%1$s</string>
+    <string name="source_problem_invalid_link">这不是有效的 https:// 链接。</string>
+    <string name="source_problem_site_not_found">该网站不存在，或你处于离线状态。</string>
+    <string name="source_problem_page_not_found">此链接处没有内容。</string>
+    <string name="source_problem_server_error">网站返回了错误，请稍后重试。</string>
+    <string name="source_problem_download_failed">下载失败，请检查网络连接。</string>
+    <string name="source_problem_not_a_blocklist">此链接不是拦截列表，请链接到原始文本文件。</string>
+    <string name="source_problem_too_large">此拦截列表过大。</string>
+    <string name="source_problem_over_total_limit">你的拦截列表总计超过了 %1$s 个域名的上限。</string>
+
+    <!-- Whitelist screen -->
+    <string name="whitelist_info_title">白名单说明</string>
+    <string name="whitelist_info_body">网站 — 白名单中的域名永远不会被拦截。将网站加入白名单不会放行该网站可能链接到的广告。\n\n应用 — 所选应用将完全绕过 VPN，使用你的普通网络连接。其他所有应用的流量都会经由 VPN 进行过滤。</string>
+    <string name="tab_apps">应用</string>
+    <string name="whitelist_already">已在白名单中</string>
+    <string name="whitelist_invalid">无法识别域名，请尝试例如 example.com</string>
+    <string name="whitelist_empty">将网站加入白名单，即可让其绕过过滤。</string>
+
+    <!-- Apps tab -->
+    <string name="apps_search_hint">搜索应用…</string>
+    <string name="apps_loading">正在加载应用… 可能需要几秒钟。</string>
+    <string name="apps_added_to_bypass">已将 %1$s 加入绕过列表</string>
+    <string name="apps_removed_from_bypass">已将 %1$s 移出绕过列表</string>
+    <string name="apps_reset_defaults">恢复默认</string>
+
+    <!-- VPN notification -->
+    <string name="notification_channel_name">VPN 状态</string>
+    <string name="notification_channel_description">Just Block VPN 运行时显示</string>
+    <string name="notification_title">Just Block 正在运行</string>
+    <string name="notification_text">正在拦截广告和跟踪器</string>
+    <string name="notification_stop">停止</string>
+</resources>

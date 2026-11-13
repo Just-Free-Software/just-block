@@ -1,5 +1,7 @@
 package fyi.justfreesoftware.justblock.ui
 
+import androidx.compose.ui.res.stringResource
+import fyi.justfreesoftware.justblock.R
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -63,6 +65,8 @@ fun UrlsTab(
     var input by remember { mutableStateOf("") }
     var isInputFocused by remember { mutableStateOf(false) }
     val inputFocusRequester = remember { FocusRequester() }
+    val alreadyWhitelistedMessage = stringResource(R.string.whitelist_already)
+    val invalidUrlMessage         = stringResource(R.string.whitelist_invalid)
 
     fun addUrl() {
         if (input.isBlank()) return
@@ -73,7 +77,7 @@ fun UrlsTab(
                 coroutineScope.launch {
                     snackbarHostState.currentSnackbarData?.dismiss()
                     snackbarHostState.showSnackbar(
-                        message = "Already whitelisted",
+                        message = alreadyWhitelistedMessage,
                         duration = SnackbarDuration.Short
                     )
                 }
@@ -82,7 +86,7 @@ fun UrlsTab(
                 coroutineScope.launch {
                     snackbarHostState.currentSnackbarData?.dismiss()
                     snackbarHostState.showSnackbar(
-                        message = "Couldn't read a domain from that — try e.g. example.com",
+                        message = invalidUrlMessage,
                         duration = SnackbarDuration.Short
                     )
                 }
@@ -111,7 +115,7 @@ fun UrlsTab(
                     .weight(1f)
                     .focusRequester(inputFocusRequester)
                     .onFocusChanged { isInputFocused = it.isFocused },
-                placeholder      = { Text("e.g. example.com") },
+                placeholder      = { Text(stringResource(R.string.example_domain_hint)) },
                 singleLine       = true,
                 shape            = RoundedCornerShape(12.dp),
                 keyboardOptions  = KeyboardOptions(imeAction = ImeAction.Done),
@@ -126,7 +130,7 @@ fun UrlsTab(
             ) {
                 Icon(
                     imageVector        = Icons.Default.Add,
-                    contentDescription = "Add",
+                    contentDescription = stringResource(R.string.add),
                 )
             }
         }
@@ -148,7 +152,7 @@ fun UrlsTab(
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text  = "Whitelist a site to allow it to bypass filtering.",
+                    text  = stringResource(R.string.whitelist_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -179,7 +183,7 @@ fun UrlsTab(
                         ) {
                             Icon(
                                 imageVector        = Icons.Default.Delete,
-                                contentDescription = "Remove",
+                                contentDescription = stringResource(R.string.remove),
                                 tint               = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
