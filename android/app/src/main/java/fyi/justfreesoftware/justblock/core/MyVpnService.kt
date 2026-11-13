@@ -61,6 +61,12 @@ class MyVpnService : VpnService() {
         private const val NOTIFICATION_CHANNEL = "justblock_vpn"
 
         /**
+         * How long to wait for a stopped proxy's Rust task to exit and let
+         * go of the TUN fd. It normally exits within milliseconds.
+         */
+        private const val PROXY_EXIT_TIMEOUT_MS = 2_000L
+
+        /**
          * Backup upstreams used when the primary (AdGuard DoQ) fails.
          * Cloudflare and Google don't offer DoQ, so these are DoH3
          * (DNS over HTTP/3, RFC 8484 over an HTTP/3 POST).
@@ -309,19 +315,31 @@ class MyVpnService : VpnService() {
      * now rather than whenever the Kotlin handle is garbage collected; the
      * Rust task still holds what it needs until it exits.
      *
-     * The proxy is published, used and released under the [dnsFilter]
-     * monitor. DnsFilter invokes its push callbacks while holding that same
-     * monitor, so a callback can never call into a closed proxy, and a single
-     * lock keeps the ordering deadlock-free.
+     * With [awaitExit], blocks (up to [PROXY_EXIT_TIMEOUT_MS]) until the
+     * proxy's Rust task has exited and let go of the TUN fd, and returns
+     * false if it hasn't by then. Callers about to reuse or close the TUN
+     * fd use this so the old task can't interfere with the next proxy. It
+     * must not be used on the main thread.
+     *
+     * The proxy is published and unpublished under the [dnsFilter] monitor.
+     * DnsFilter invokes its push callbacks while holding that same monitor,
+     * so once this has cleared [dnsProxy] no callback can reach the proxy
+     * and it can be stopped and closed outside the lock, without stalling
+     * rule updates while waiting.
      */
-    private fun releaseProxy() {
-        synchronized(dnsFilter) {
-            dnsProxy?.let {
-                it.stop()
-                it.close()
-            }
-            dnsProxy = null
+    private fun releaseProxy(awaitExit: Boolean = false): Boolean {
+        val proxy = synchronized(dnsFilter) {
+            dnsProxy.also { dnsProxy = null }
+        } ?: return true
+
+        val exited = if (awaitExit) {
+            proxy.stopAndWait(PROXY_EXIT_TIMEOUT_MS.toULong())
+        } else {
+            proxy.stop()
+            true
         }
+        proxy.close()
+        return exited
     }
 
     /**
@@ -440,7 +458,12 @@ class MyVpnService : VpnService() {
             if (!isRunning) return
             Log.i(TAG, "Rebuilding TUN to flush DNS cache…")
 
-            releaseProxy()
+            // Wait for the old proxy to let go of the TUN before closing it:
+            // the new TUN can be handed the same fd number. If it doesn't
+            // exit in time, carry on; the new proxy retries its registration.
+            if (!releaseProxy(awaitExit = true)) {
+                Log.w(TAG, "Old proxy still exiting — rebuilding anyway")
+            }
 
             try {
                 vpnInterface?.close()
@@ -488,14 +511,15 @@ class MyVpnService : VpnService() {
 
             Log.i(TAG, "Reconnecting upstream on new network…")
 
-            // 1. Stop old proxy (kills stale QUIC connections bound to old network)
-            releaseProxy()
-
-            // 2. Give the old proxy's Tokio task time to exit and release the
-            //    AsyncFd on the TUN fd.  The task may be waiting on a QUIC query
-            //    timeout (up to 3 s), but the cancel token should interrupt the
-            //    select! loop within a few hundred ms.
-            kotlinx.coroutines.delay(1000)
+            // 1. Stop the old proxy (kills stale QUIC connections bound to
+            //    the old network) and wait for its Tokio task to release the
+            //    TUN fd, so the new proxy can register it straight away.
+            if (!releaseProxy(awaitExit = true)) {
+                // 2. It didn't exit in time. Give it a little longer; the new
+                //    proxy also retries its registration for a few seconds.
+                Log.w(TAG, "Old proxy still exiting — delaying the restart")
+                kotlinx.coroutines.delay(1000)
+            }
 
             // 3. Update underlying network so the VPN inherits the new network's
             //    connectivity status — bypassed apps see uninterrupted internet.
