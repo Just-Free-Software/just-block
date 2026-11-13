@@ -16,14 +16,14 @@ object ServiceLocator {
         private set
 
     fun init(context: Context) {
-        if (::dnsFilter.isInitialized) return  // already set up
+        if (::dnsFilter.isInitialized) return // already set up
         val appContext = context.applicationContext
         dnsFilter = DnsFilter()
         blocklistRepository = BlocklistRepository(
-            context         = appContext,
-            dnsFilter       = dnsFilter,
+            context = appContext,
+            dnsFilter = dnsFilter,
             userPreferences = UserPreferences(appContext),
-            fetcher         = BlocklistFetcher()
+            fetcher = BlocklistFetcher()
         )
     }
 }

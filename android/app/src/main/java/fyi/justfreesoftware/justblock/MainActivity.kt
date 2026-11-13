@@ -1,6 +1,5 @@
 package fyi.justfreesoftware.justblock
 
-import androidx.compose.ui.res.stringResource
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
@@ -11,39 +10,40 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import fyi.justfreesoftware.justblock.ui.WhitelistScreen
-import fyi.justfreesoftware.justblock.ui.HomeScreen
 import fyi.justfreesoftware.justblock.ui.BlockingScreen
+import fyi.justfreesoftware.justblock.ui.HomeScreen
 import fyi.justfreesoftware.justblock.ui.VpnViewModel
+import fyi.justfreesoftware.justblock.ui.WhitelistScreen
 import fyi.justfreesoftware.justblock.ui.theme.JustBlockTheme
 import fyi.justfreesoftware.justblock.ui.theme.ThemeMode
 
@@ -108,77 +108,80 @@ class MainActivity : ComponentActivity() {
                 var dontShowAgain by remember { mutableStateOf(false) }
                 JustBlockTheme(themeMode = ThemeMode.Dark) {
                     AlertDialog(
-                    onDismissRequest = {
-                        // User dismissed by clicking outside or back button
-                        showWelcomeDialog = false
-                        if (dontShowAgain) {
-                            viewModel.setHasSeenWelcome(true)
-                        }
-                        permissionsRequested = true
-                        checkAndRequestPermissions()
-                    },
-                    title = {
-                        Text(
-                            text = stringResource(R.string.welcome_title),
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                    },
-                    text = {
-                        Column {
-                            Text(
-                                stringResource(R.string.welcome_intro),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            Text(
-                                stringResource(R.string.welcome_notification_title),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                stringResource(R.string.welcome_notification_body),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            Text(
-                                stringResource(R.string.welcome_vpn_title),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                stringResource(R.string.welcome_vpn_body),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(top = 8.dp)
-                            ) {
-                                Checkbox(
-                                    checked = dontShowAgain,
-                                    onCheckedChange = { dontShowAgain = it }
-                                )
-                                Text(stringResource(R.string.welcome_dont_show_again), style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = {
+                        onDismissRequest = {
+                            // User dismissed by clicking outside or back button
                             showWelcomeDialog = false
                             if (dontShowAgain) {
                                 viewModel.setHasSeenWelcome(true)
                             }
                             permissionsRequested = true
                             checkAndRequestPermissions()
-                        }) {
-                            Text(stringResource(R.string.ok))
+                        },
+                        title = {
+                            Text(
+                                text = stringResource(R.string.welcome_title),
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Column {
+                                Text(
+                                    stringResource(R.string.welcome_intro),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Text(
+                                    stringResource(R.string.welcome_notification_title),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    stringResource(R.string.welcome_notification_body),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Text(
+                                    stringResource(R.string.welcome_vpn_title),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    stringResource(R.string.welcome_vpn_body),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(top = 8.dp)
+                                ) {
+                                    Checkbox(
+                                        checked = dontShowAgain,
+                                        onCheckedChange = { dontShowAgain = it }
+                                    )
+                                    Text(
+                                        stringResource(R.string.welcome_dont_show_again),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showWelcomeDialog = false
+                                if (dontShowAgain) {
+                                    viewModel.setHasSeenWelcome(true)
+                                }
+                                permissionsRequested = true
+                                checkAndRequestPermissions()
+                            }) {
+                                Text(stringResource(R.string.ok))
+                            }
                         }
-                    }
-                )
+                    )
                 }
             }
 
@@ -188,42 +191,44 @@ class MainActivity : ComponentActivity() {
                         NavigationBar {
                             NavigationBarItem(
                                 selected = selectedTab == 0,
-                                onClick  = { selectedTab = 0 },
-                                icon     = { Icon(Icons.Default.Home, contentDescription = null) },
-                                label    = { Text(stringResource(R.string.nav_home)) },
+                                onClick = { selectedTab = 0 },
+                                icon = { Icon(Icons.Default.Home, contentDescription = null) },
+                                label = { Text(stringResource(R.string.nav_home)) }
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 1,
-                                onClick  = { selectedTab = 1 },
-                                icon     = { Icon(Icons.Default.Block, contentDescription = null) },
-                                label    = { Text(stringResource(R.string.nav_blocking)) },
+                                onClick = { selectedTab = 1 },
+                                icon = { Icon(Icons.Default.Block, contentDescription = null) },
+                                label = { Text(stringResource(R.string.nav_blocking)) }
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 2,
-                                onClick  = { selectedTab = 2 },
-                                icon     = { Icon(Icons.Default.VerifiedUser, contentDescription = null) },
-                                label    = { Text(stringResource(R.string.nav_whitelist)) },
+                                onClick = { selectedTab = 2 },
+                                icon = {
+                                    Icon(Icons.Default.VerifiedUser, contentDescription = null)
+                                },
+                                label = { Text(stringResource(R.string.nav_whitelist)) }
                             )
                         }
                     }
                 ) { padding ->
                     when (selectedTab) {
                         0 -> HomeScreen(
-                            viewModel  = viewModel,
+                            viewModel = viewModel,
                             themeMode = themeMode,
                             onThemeModeChange = { viewModel.setThemeMode(it) },
-                             onOpenBlockingRules = { selectedTab = 1 },
-                             onOpenWhitelist = { selectedTab = 2 },
+                            onOpenBlockingRules = { selectedTab = 1 },
+                            onOpenWhitelist = { selectedTab = 2 },
                             onCloseApp = ::stopVpnAndClose,
-                            modifier   = Modifier.padding(padding),
+                            modifier = Modifier.padding(padding)
                         )
                         1 -> BlockingScreen(
                             viewModel = viewModel,
-                            modifier  = Modifier.padding(padding),
+                            modifier = Modifier.padding(padding)
                         )
                         2 -> WhitelistScreen(
                             viewModel = viewModel,
-                            modifier  = Modifier.padding(padding),
+                            modifier = Modifier.padding(padding)
                         )
                     }
                 }

@@ -1,8 +1,6 @@
 package fyi.justfreesoftware.justblock.ui
 
 import androidx.annotation.StringRes
-import androidx.compose.ui.res.stringResource
-import fyi.justfreesoftware.justblock.R
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -48,15 +46,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import fyi.justfreesoftware.justblock.R
 import kotlinx.coroutines.delay
 
 @Composable
-fun ManualTab(
-    viewModel: VpnViewModel,
-    modifier: Modifier = Modifier,
-) {
+fun ManualTab(viewModel: VpnViewModel, modifier: Modifier = Modifier) {
     val manualBlocked by viewModel.manualBlockedDomains.collectAsState()
     val pausedDomains by viewModel.pausedDomains.collectAsState()
     val focusManager = LocalFocusManager.current
@@ -71,8 +68,8 @@ fun ManualTab(
         // ── Add field ─────────────────────────────────────────────────────
         DomainInputRow(
             placeholder = stringResource(R.string.example_domain_hint),
-            onAdd       = { viewModel.addManualBlockedDomain(it) },
-            modifier    = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            onAdd = { viewModel.addManualBlockedDomain(it) },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
 
         HorizontalDivider()
@@ -80,42 +77,44 @@ fun ManualTab(
         // ── Blocked domains ───────────────────────────────────────────────
         if (manualBlocked.isEmpty()) {
             Column(
-                modifier            = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(
-                    imageVector        = Icons.Default.Block,
+                    imageVector = Icons.Default.Block,
                     contentDescription = null,
-                    tint              = MaterialTheme.colorScheme.primary,
-                    modifier          = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(64.dp)
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text  = stringResource(R.string.manual_empty),
+                    text = stringResource(R.string.manual_empty),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(vertical = 4.dp),
+                contentPadding = PaddingValues(vertical = 4.dp)
             ) {
                 items(manualBlocked.toList().sorted(), key = { "blocked_$it" }) { domain ->
                     Column {
                         BlockedDomainRow(
-                            domain    = domain,
+                            domain = domain,
                             expiresAt = pausedDomains[domain],
-                            onPause   = { durationMs -> viewModel.pauseBlockedDomain(domain, durationMs) },
-                            onResume  = { viewModel.resumeBlockedDomain(domain) },
-                            onDelete  = { viewModel.removeManualBlockedDomain(domain) },
+                            onPause = { durationMs ->
+                                viewModel.pauseBlockedDomain(domain, durationMs)
+                            },
+                            onResume = { viewModel.resumeBlockedDomain(domain) },
+                            onDelete = { viewModel.removeManualBlockedDomain(domain) }
                         )
                         if (!viewModel.isValidManualBlock(domain)) {
                             Text(
-                                text  = stringResource(R.string.manual_invalid),
+                                text = stringResource(R.string.manual_invalid),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(start = 12.dp, bottom = 8.dp),
+                                modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
                             )
                         }
                     }
@@ -133,10 +132,10 @@ fun ManualTab(
 private data class PauseDuration(@StringRes val labelRes: Int, val millis: Long?)
 
 private val PAUSE_DURATIONS = listOf(
-    PauseDuration(R.string.pause_15_minutes,   15 * 60 * 1_000L),
-    PauseDuration(R.string.pause_1_hour,       60 * 60 * 1_000L),
-    PauseDuration(R.string.pause_1_day,        24 * 60 * 60 * 1_000L),
-    PauseDuration(R.string.pause_indefinitely, null),
+    PauseDuration(R.string.pause_15_minutes, 15 * 60 * 1_000L),
+    PauseDuration(R.string.pause_1_hour, 60 * 60 * 1_000L),
+    PauseDuration(R.string.pause_1_day, 24 * 60 * 60 * 1_000L),
+    PauseDuration(R.string.pause_indefinitely, null)
 )
 
 /**
@@ -147,10 +146,10 @@ private val PAUSE_DURATIONS = listOf(
 private fun formatRemaining(remainingMs: Long): String {
     val totalMinutes = remainingMs / 60_000
     return when {
-        totalMinutes < 1    -> stringResource(R.string.remaining_under_minute)
-        totalMinutes < 60   -> stringResource(R.string.remaining_minutes, totalMinutes)
+        totalMinutes < 1 -> stringResource(R.string.remaining_under_minute)
+        totalMinutes < 60 -> stringResource(R.string.remaining_minutes, totalMinutes)
         totalMinutes < 1440 -> stringResource(R.string.remaining_hours, totalMinutes / 60)
-        else                -> stringResource(R.string.remaining_days, totalMinutes / 1440)
+        else -> stringResource(R.string.remaining_days, totalMinutes / 1440)
     }
 }
 
@@ -161,7 +160,7 @@ private fun BlockedDomainRow(
     expiresAt: Long?,
     onPause: (durationMs: Long?) -> Unit,
     onResume: () -> Unit,
-    onDelete: () -> Unit,
+    onDelete: () -> Unit
 ) {
     val isPaused = expiresAt != null
     var menuExpanded by remember { mutableStateOf(false) }
@@ -178,16 +177,21 @@ private fun BlockedDomainRow(
     }
 
     val subtitle = when {
-        !isPaused                  -> null
+        !isPaused -> null
         expiresAt == Long.MAX_VALUE -> stringResource(R.string.paused_indefinitely)
-        else                       -> stringResource(R.string.paused_with_remaining, formatRemaining(expiresAt - now))
+        else -> stringResource(
+            R.string.paused_with_remaining,
+            formatRemaining(
+                expiresAt - now
+            )
+        )
     }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, top = 4.dp, end = 8.dp, bottom = 4.dp),
+            .padding(start = 12.dp, top = 4.dp, end = 8.dp, bottom = 4.dp)
     ) {
         // Domain label
         var isExpanded by remember { mutableStateOf(false) }
@@ -197,18 +201,21 @@ private fun BlockedDomainRow(
                 .clickable { isExpanded = !isExpanded }
         ) {
             Text(
-                text      = domain,
-                style     = MaterialTheme.typography.bodyMedium,
-                maxLines  = if (isExpanded) Int.MAX_VALUE else 1,
-                overflow  = if (isExpanded) TextOverflow.Clip else TextOverflow.Ellipsis,
-                color     = if (isPaused) MaterialTheme.colorScheme.onSurfaceVariant
-                            else MaterialTheme.colorScheme.onSurface,
+                text = domain,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = if (isExpanded) Int.MAX_VALUE else 1,
+                overflow = if (isExpanded) TextOverflow.Clip else TextOverflow.Ellipsis,
+                color = if (isPaused) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
             )
             if (subtitle != null) {
                 Text(
-                    text  = subtitle,
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -219,47 +226,58 @@ private fun BlockedDomainRow(
         SplitButtonLayout(
             leadingButton = {
                 SplitButtonDefaults.LeadingButton(
-                    onClick = { if (isPaused) onResume() else onPause(PAUSE_DURATIONS.first().millis) },
+                    onClick = {
+                        if (isPaused) onResume() else onPause(PAUSE_DURATIONS.first().millis)
+                    }
                 ) {
                     Icon(
                         imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                        contentDescription = stringResource(if (isPaused) R.string.resume else R.string.pause),
-                        modifier = Modifier.size(18.dp),
+                        contentDescription = stringResource(
+                            if (isPaused) R.string.resume else R.string.pause
+                        ),
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             },
             trailingButton = {
                 SplitButtonDefaults.TrailingButton(
                     checked = menuExpanded,
-                    onCheckedChange = { menuExpanded = it },
+                    onCheckedChange = { menuExpanded = it }
                 ) {
                     // Standard M3 split button behaviour: the arrow flips
                     // while the menu is open.
                     val rotation by animateFloatAsState(
                         targetValue = if (menuExpanded) 180f else 0f,
-                        label       = "Trailing Icon Rotation",
+                        label = "Trailing Icon Rotation"
                     )
                     Icon(
                         imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = stringResource(if (menuExpanded) R.string.collapse_menu else R.string.expand_menu),
+                        contentDescription = stringResource(
+                            if (menuExpanded) R.string.collapse_menu else R.string.expand_menu
+                        ),
                         modifier = Modifier
                             .size(SplitButtonDefaults.TrailingIconSize)
-                            .graphicsLayer { rotationZ = rotation },
+                            .graphicsLayer { rotationZ = rotation }
                     )
                 }
-            },
+            }
         )
 
         // Dropdown menu anchored to the split button
         DropdownMenu(
-            expanded         = menuExpanded,
+            expanded = menuExpanded,
             onDismissRequest = { menuExpanded = false },
-            shape            = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-            modifier         = Modifier.padding(4.dp)
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+            modifier = Modifier.padding(4.dp)
         ) {
             PAUSE_DURATIONS.forEach { duration ->
                 DropdownMenuItem(
-                    text    = { Text(stringResource(duration.labelRes), style = MaterialTheme.typography.bodyLarge) },
+                    text = {
+                        Text(
+                            stringResource(duration.labelRes),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    },
                     onClick = {
                         menuExpanded = false
                         onPause(duration.millis)
@@ -275,7 +293,13 @@ private fun BlockedDomainRow(
             }
             HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) },
+                text = {
+                    Text(
+                        stringResource(R.string.delete),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                },
                 onClick = {
                     menuExpanded = false
                     onDelete()

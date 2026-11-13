@@ -8,8 +8,8 @@ package fyi.justfreesoftware.justblock.core
  * @param sniHostname TLS SNI hostname used for DoQ (e.g. "dns.adguard-dns.com").
  */
 data class UpstreamConfig(
-    val host        : String = "94.140.14.14",
-    val sniHostname : String = "dns.adguard-dns.com",
+    val host: String = "94.140.14.14",
+    val sniHostname: String = "dns.adguard-dns.com"
 ) {
     companion object {
         private const val SEPARATOR = "\t"
@@ -21,7 +21,7 @@ data class UpstreamConfig(
          */
         fun encode(config: UpstreamConfig): String = listOf(
             config.host,
-            config.sniHostname,
+            config.sniHostname
         ).joinToString(SEPARATOR)
 
         /**

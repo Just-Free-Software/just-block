@@ -1,8 +1,5 @@
 package fyi.justfreesoftware.justblock.ui
 
-import androidx.compose.ui.res.stringResource
-import fyi.justfreesoftware.justblock.R
-import fyi.justfreesoftware.justblock.ui.theme.HeaderTextStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,8 +21,8 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -42,15 +39,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import fyi.justfreesoftware.justblock.R
+import fyi.justfreesoftware.justblock.ui.theme.HeaderTextStyle
 
 @Composable
-fun BlockingScreen(
-    viewModel: VpnViewModel,
-    modifier: Modifier = Modifier,
-) {
+fun BlockingScreen(viewModel: VpnViewModel, modifier: Modifier = Modifier) {
     // 0 = Manual (default), 1 = Blocklists
     var selectedTab by remember { mutableStateOf(0) }
     var showInfoDialog by remember { mutableStateOf(false) }
@@ -88,7 +85,7 @@ fun BlockingScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { scaffoldPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(scaffoldPadding)) {
             // ── Header ────────────────────────────────────────────────────
@@ -99,8 +96,8 @@ fun BlockingScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text  = stringResource(R.string.nav_blocking),
-                    style = HeaderTextStyle,
+                    text = stringResource(R.string.nav_blocking),
+                    style = HeaderTextStyle
                 )
                 Spacer(Modifier.weight(1f))
                 IconButton(
@@ -120,33 +117,33 @@ fun BlockingScreen(
             TabRow(selectedTabIndex = selectedTab) {
                 Tab(
                     selected = selectedTab == 0,
-                    onClick  = { selectedTab = 0 },
+                    onClick = { selectedTab = 0 },
                     text = {
                         Text(
                             stringResource(R.string.tab_website),
                             style = MaterialTheme.typography.labelLarge
                         )
-                    },
+                    }
                 )
                 Tab(
                     selected = selectedTab == 1,
-                    onClick  = { selectedTab = 1 },
+                    onClick = { selectedTab = 1 },
                     text = {
                         Text(
                             stringResource(R.string.tab_blocklists),
                             style = MaterialTheme.typography.labelLarge
                         )
-                    },
+                    }
                 )
             }
 
             // ── Content ───────────────────────────────────────────────────
             when (selectedTab) {
                 0 -> ManualTab(
-                    viewModel = viewModel,
+                    viewModel = viewModel
                 )
                 1 -> BlocklistsTab(
-                    viewModel = viewModel,
+                    viewModel = viewModel
                 )
             }
         }
@@ -159,7 +156,7 @@ fun BlockingScreen(
 internal fun DomainInputRow(
     placeholder: String,
     onAdd: (String) -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     var text by remember { mutableStateOf("") }
     var isFocused by remember { mutableStateOf(false) }
@@ -167,16 +164,16 @@ internal fun DomainInputRow(
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier          = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth()
     ) {
         OutlinedTextField(
-            value         = text,
+            value = text,
             onValueChange = { text = it },
-            placeholder   = { Text(placeholder) },
-            singleLine    = true,
-            shape         = RoundedCornerShape(12.dp),
-            keyboardOptions  = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions  = KeyboardActions(
+            placeholder = { Text(placeholder) },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(
                 onDone = {
                     if (text.isNotBlank()) {
                         onAdd(text.trim())
@@ -184,10 +181,10 @@ internal fun DomainInputRow(
                     }
                 }
             ),
-            modifier      = Modifier
+            modifier = Modifier
                 .weight(1f)
                 .focusRequester(focusRequester)
-                .onFocusChanged { isFocused = it.isFocused },
+                .onFocusChanged { isFocused = it.isFocused }
         )
         Spacer(Modifier.width(8.dp))
         FilledIconButton(
@@ -198,11 +195,11 @@ internal fun DomainInputRow(
                     onAdd(text.trim())
                     text = ""
                 }
-            },
+            }
         ) {
             Icon(
                 Icons.Default.Add,
-                contentDescription = stringResource(R.string.add),
+                contentDescription = stringResource(R.string.add)
             )
         }
     }
@@ -212,19 +209,19 @@ internal fun DomainInputRow(
 internal fun DomainRow(label: String, onDelete: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier          = Modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
     ) {
         Text(
-            text     = label,
-            style    = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f),
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
         )
         IconButton(onClick = onDelete) {
             Icon(
                 Icons.Default.Delete,
-                contentDescription = stringResource(R.string.remove),
+                contentDescription = stringResource(R.string.remove)
             )
         }
     }

@@ -52,20 +52,19 @@ private val LightColorScheme = lightColorScheme(
 )
 
 enum class ThemeMode {
-    Light, Dark, Dynamic
+    Light,
+    Dark,
+    Dynamic
 }
 
 @Composable
-fun JustBlockTheme(
-    themeMode: ThemeMode = ThemeMode.Dynamic,
-    content: @Composable () -> Unit
-) {
+fun JustBlockTheme(themeMode: ThemeMode = ThemeMode.Dynamic, content: @Composable () -> Unit) {
     val darkTheme = when (themeMode) {
         ThemeMode.Light -> false
         ThemeMode.Dark -> true
         ThemeMode.Dynamic -> isSystemInDarkTheme()
     }
-    
+
     val dynamicColor = themeMode == ThemeMode.Dynamic
     val colorScheme = when {
         dynamicColor -> {

@@ -1,9 +1,9 @@
 package fyi.justfreesoftware.justblock.data
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class BlocklistFetcherTest {
@@ -82,8 +82,14 @@ class BlocklistFetcherResponseTest {
 
     @Test
     fun missingPageIsPageNotFound() {
-        assertEquals(SourceProblem.PAGE_NOT_FOUND, problemOf(fetcher.readResponse(response(404, ""))))
-        assertEquals(SourceProblem.PAGE_NOT_FOUND, problemOf(fetcher.readResponse(response(410, ""))))
+        assertEquals(
+            SourceProblem.PAGE_NOT_FOUND,
+            problemOf(fetcher.readResponse(response(404, "")))
+        )
+        assertEquals(
+            SourceProblem.PAGE_NOT_FOUND,
+            problemOf(fetcher.readResponse(response(410, "")))
+        )
     }
 
     @Test

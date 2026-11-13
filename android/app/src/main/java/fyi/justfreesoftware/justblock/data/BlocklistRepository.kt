@@ -2,6 +2,7 @@ package fyi.justfreesoftware.justblock.data
 
 import android.util.Log
 import fyi.justfreesoftware.justblock.core.DnsFilter
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -12,7 +13,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import java.util.Locale
 
 sealed interface BlocklistState {
     object Idle : BlocklistState
@@ -25,27 +25,33 @@ sealed interface BlocklistState {
 enum class SourceProblem {
     /** Not a well-formed https:// URL. */
     INVALID_LINK,
+
     /** The host name doesn't resolve: no such site, or the device is offline. */
     SITE_NOT_FOUND,
+
     /** The server answered 404 or 410. */
     PAGE_NOT_FOUND,
+
     /** The server answered with any other non-2xx status. */
     SERVER_ERROR,
+
     /** The download failed for another reason, such as a timeout. */
     DOWNLOAD_FAILED,
+
     /** The link is a web page, or nothing in it parsed as a domain. */
     NOT_A_BLOCKLIST,
+
     /** The source itself is over one of [BlocklistFetcher]'s size limits. */
     TOO_LARGE,
+
     /** Adding the source would push all sources past [BlocklistFetcher.MAX_DOMAINS]. */
-    OVER_TOTAL_LIMIT,
+    OVER_TOTAL_LIMIT
 }
 
 sealed interface FetchResult {
     data class Loaded(val domains: Set<String>) : FetchResult
     data class Failed(val problem: SourceProblem) : FetchResult
 }
-
 
 /**
  * Turns blocklist lines into bare domains.
@@ -68,6 +74,7 @@ class FilterParser {
     companion object {
         private val WHITESPACE_REGEX = Regex("\\s+")
         private val HOSTNAME_REGEX = Regex("^[a-z0-9_-]+(\\.[a-z0-9_-]+)+$")
+
         // Adblock element-hiding / scriptlet markers. These rules hide parts
         // of a page and must not become a block of the whole domain.
         private val COSMETIC_MARKERS = listOf("##", "#@#", "#?#", "#$#", "#%#")
@@ -93,8 +100,8 @@ class FilterParser {
         // Support popular AdBlock/uBlock style simple wildcard domains: ||example.com^
         line = when {
             line.startsWith("||") && line.endsWith("^") -> line.substring(2, line.length - 1)
-            line.startsWith("||")                              -> line.substring(2)
-            else                                                      -> line
+            line.startsWith("||") -> line.substring(2)
+            else -> line
         }
 
         // Clean up leading wildcard formatting indicators
@@ -115,8 +122,7 @@ class FilterParser {
     }
 
     /** Parses a whole blocklist file, dropping invalid lines and duplicates. */
-    fun parseAll(lines: Sequence<String>): Set<String> =
-        lines.mapNotNullTo(HashSet()) { parse(it) }
+    fun parseAll(lines: Sequence<String>): Set<String> = lines.mapNotNullTo(HashSet()) { parse(it) }
 }
 
 /**
@@ -131,8 +137,10 @@ class BlocklistFetcher(
 ) {
     companion object {
         const val MAX_BYTES = 64L * 1024 * 1024
+
         // No valid domain line comes close; longer lines are skipped.
         const val MAX_LINE_LENGTH = 1024
+
         // Also the cap on all sources combined, see BlocklistRepository.
         const val MAX_DOMAINS = 2_000_000
     }
@@ -172,8 +180,11 @@ class BlocklistFetcher(
     internal fun readResponse(response: okhttp3.Response): FetchResult {
         if (!response.isSuccessful) {
             return FetchResult.Failed(
-                if (response.code == 404 || response.code == 410) SourceProblem.PAGE_NOT_FOUND
-                else SourceProblem.SERVER_ERROR
+                if (response.code == 404 || response.code == 410) {
+                    SourceProblem.PAGE_NOT_FOUND
+                } else {
+                    SourceProblem.SERVER_ERROR
+                }
             )
         }
         // Blocklists are plain text. An HTML page is usually a link to a
@@ -296,6 +307,7 @@ class BlocklistRepository(
     private val TAG = "BlocklistRepository"
 
     private val sourceCache = SourceCache(java.io.File(context.cacheDir, "blocklists"))
+
     // Single merged cache written by older versions. Only read to arm the
     // first start after updating, then deleted.
     private val legacyCacheFile = java.io.File(context.cacheDir, "blocklist_cache.txt")
@@ -304,6 +316,7 @@ class BlocklistRepository(
     val state: StateFlow<BlocklistState> = _state.asStateFlow()
 
     private val _sourceIssues = MutableStateFlow<Map<String, SourceIssue>>(emptyMap())
+
     /** Sources that failed in the last refresh, keyed by URL. */
     val sourceIssues: StateFlow<Map<String, SourceIssue>> = _sourceIssues.asStateFlow()
 
@@ -324,7 +337,6 @@ class BlocklistRepository(
     suspend fun loadAndCompileBlocklists() = loadMutex.withLock { loadAndCompile() }
 
     private suspend fun loadAndCompile() = withContext(Dispatchers.IO) {
-
         _state.value = BlocklistState.Loading
 
         try {
@@ -336,7 +348,11 @@ class BlocklistRepository(
             val initialSet = HashSet<String>(250_000)
             for (url in customUrls) {
                 val saved = readSaved(url) ?: continue
-                if (initialSet.size + saved.size <= BlocklistFetcher.MAX_DOMAINS) initialSet.addAll(saved)
+                if (initialSet.size + saved.size <=
+                    BlocklistFetcher.MAX_DOMAINS
+                ) {
+                    initialSet.addAll(saved)
+                }
             }
             if (legacyCacheFile.exists()) {
                 try {
@@ -368,7 +384,7 @@ class BlocklistRepository(
                                 Log.e(TAG, "Failed to fetch source: $url", e)
                                 FetchResult.Failed(SourceProblem.DOWNLOAD_FAILED)
                             }
-                        } 
+                        }
                     }
                     .awaitAll()
                     .forEach { (url, result) ->
@@ -376,14 +392,16 @@ class BlocklistRepository(
                         val domains = when (result) {
                             is FetchResult.Loaded -> result.domains
                             is FetchResult.Failed -> readSaved(url).also {
-                                issues[url] = SourceIssue(result.problem, usingSavedCopy = it != null)
+                                issues[url] =
+                                    SourceIssue(result.problem, usingSavedCopy = it != null)
                             }
                         } ?: return@forEach
 
                         // Each source is capped, but many sources together could
                         // still exhaust memory, so cap the combined set too.
                         if (remoteCompiled.size + domains.size > BlocklistFetcher.MAX_DOMAINS) {
-                            issues[url] = SourceIssue(SourceProblem.OVER_TOTAL_LIMIT, usingSavedCopy = false)
+                            issues[url] =
+                                SourceIssue(SourceProblem.OVER_TOTAL_LIMIT, usingSavedCopy = false)
                         } else {
                             remoteCompiled.addAll(domains)
                             if (result is FetchResult.Loaded) toSave.add(url to domains)

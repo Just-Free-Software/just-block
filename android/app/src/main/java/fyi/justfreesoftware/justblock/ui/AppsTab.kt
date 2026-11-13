@@ -1,8 +1,5 @@
 package fyi.justfreesoftware.justblock.ui
 
-import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.res.stringResource
-import fyi.justfreesoftware.justblock.R
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -47,15 +44,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.createBitmap
+import fyi.justfreesoftware.justblock.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.core.graphics.createBitmap
 
 /**
  * Data class holding the display-relevant info for a single installed app.
@@ -66,7 +66,7 @@ private data class AppInfo(
     val packageName: String,
     val label: String,
     val icon: Drawable,
-    val isSystemApp: Boolean,
+    val isSystemApp: Boolean
 )
 
 /** Converts any [Drawable] to a [Bitmap]. Handles both BitmapDrawable and other types. */
@@ -74,7 +74,7 @@ private fun Drawable.toBitmap(size: Int = 96): Bitmap {
     if (this is BitmapDrawable && bitmap != null) return bitmap
     val bmp = createBitmap(
         if (intrinsicWidth > 0) intrinsicWidth else size,
-        if (intrinsicHeight > 0) intrinsicHeight else size,
+        if (intrinsicHeight > 0) intrinsicHeight else size
     )
     val canvas = Canvas(bmp)
     setBounds(0, 0, canvas.width, canvas.height)
@@ -86,7 +86,7 @@ private fun Drawable.toBitmap(size: Int = 96): Bitmap {
 fun AppsTab(
     viewModel: VpnViewModel,
     snackbarHostState: SnackbarHostState,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -99,13 +99,13 @@ fun AppsTab(
         installedApps = withContext(Dispatchers.IO) {
             val pm = context.packageManager
             pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                .filter { it.packageName != context.packageName }  // Exclude ourselves
+                .filter { it.packageName != context.packageName } // Exclude ourselves
                 .map { appInfo ->
                     AppInfo(
                         packageName = appInfo.packageName,
-                        label       = appInfo.loadLabel(pm).toString(),
-                        icon        = appInfo.loadIcon(pm),
-                        isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                        label = appInfo.loadLabel(pm).toString(),
+                        icon = appInfo.loadIcon(pm),
+                        isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
                     )
                 }
                 .sortedBy { it.label.lowercase() }
@@ -122,8 +122,10 @@ fun AppsTab(
                 app.label.contains(searchQuery, ignoreCase = true) ||
                     app.packageName.contains(searchQuery, ignoreCase = true)
             }
-            .sortedWith(compareByDescending<AppInfo> { it.packageName in bypassedApps }
-                .thenBy { it.label.lowercase() })
+            .sortedWith(
+                compareByDescending<AppInfo> { it.packageName in bypassedApps }
+                    .thenBy { it.label.lowercase() }
+            )
     }
 
     Column(
@@ -135,15 +137,15 @@ fun AppsTab(
     ) {
         // ── Search bar ────────────────────────────────────────────────────
         OutlinedTextField(
-            value         = searchQuery,
+            value = searchQuery,
             onValueChange = { searchQuery = it },
-            modifier      = Modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            placeholder   = { Text(stringResource(R.string.apps_search_hint)) },
-            leadingIcon   = { Icon(Icons.Default.Search, contentDescription = null) },
-            singleLine    = true,
-            shape         = RoundedCornerShape(12.dp),
+            placeholder = { Text(stringResource(R.string.apps_search_hint)) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp)
         )
 
         HorizontalDivider()
@@ -152,40 +154,40 @@ fun AppsTab(
         Column(modifier = Modifier.weight(1f)) {
             if (installedApps.isEmpty()) {
                 Column(
-                    modifier            = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text  = stringResource(R.string.apps_loading),
+                        text = stringResource(R.string.apps_loading),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(vertical = 4.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp)
                 ) {
                     items(
                         items = displayedApps,
-                        key   = { it.packageName },
+                        key = { it.packageName }
                     ) { app ->
                         AppRow(
-                            app           = app,
-                            isBypassed    = app.packageName in bypassedApps,
-                            onToggle      = { checked ->
+                            app = app,
+                            isBypassed = app.packageName in bypassedApps,
+                            onToggle = { checked ->
                                 viewModel.setAppBypassed(app.packageName, checked)
                                 coroutineScope.launch {
                                     snackbarHostState.currentSnackbarData?.dismiss()
                                     snackbarHostState.showSnackbar(
                                         message = resources.getString(
                                             if (checked) R.string.apps_added_to_bypass else R.string.apps_removed_from_bypass,
-                                            app.label,
+                                            app.label
                                         ),
                                         duration = SnackbarDuration.Short
                                     )
                                 }
-                            },
+                            }
                         )
                     }
                 }
@@ -194,10 +196,10 @@ fun AppsTab(
 
         // ── Reset ─────────────────────────────────────────────────────────
         OutlinedButton(
-            onClick   = { viewModel.resetBypassedAppsToDefaults() },
-            modifier  = Modifier
+            onClick = { viewModel.resetBypassedAppsToDefaults() },
+            modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text(stringResource(R.string.apps_reset_defaults))
         }
@@ -205,48 +207,44 @@ fun AppsTab(
 }
 
 @Composable
-private fun AppRow(
-    app: AppInfo,
-    isBypassed: Boolean,
-    onToggle: (Boolean) -> Unit,
-) {
+private fun AppRow(app: AppInfo, isBypassed: Boolean, onToggle: (Boolean) -> Unit) {
     Row(
-        modifier            = Modifier
+        modifier = Modifier
             .fillMaxWidth()
             .clickable { onToggle(!isBypassed) }
             .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment   = Alignment.CenterVertically,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         val bitmap = remember(app.icon) { app.icon.toBitmap() }
         Image(
-            bitmap             = bitmap.asImageBitmap(),
+            bitmap = bitmap.asImageBitmap(),
             contentDescription = app.label,
-            modifier           = Modifier.size(40.dp),
+            modifier = Modifier.size(40.dp)
         )
 
         Spacer(Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text      = app.label,
-                style     = MaterialTheme.typography.bodyLarge,
-                maxLines  = 1,
-                overflow  = TextOverflow.Ellipsis,
+                text = app.label,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
-                text      = app.packageName,
-                style     = MaterialTheme.typography.bodySmall,
-                color     = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines  = 1,
-                overflow  = TextOverflow.Ellipsis,
+                text = app.packageName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
 
         Spacer(Modifier.width(8.dp))
 
         Checkbox(
-            checked    = isBypassed,
-            onCheckedChange = null,
+            checked = isBypassed,
+            onCheckedChange = null
         )
     }
 }
