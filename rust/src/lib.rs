@@ -423,8 +423,8 @@ macro_rules! log_trace {
 }
 use log_trace;
 
-/// Debug logging to Android logcat (tag: justblock-rust). Temporarily
-/// wired into log_trace below for on-device regression diagnosis.
+/// Debug logging to Android logcat (tag: justblock-rust). Only compiled
+/// into debug Android builds; it is what [log_trace] writes through.
 #[cfg(all(target_os = "android", feature = "dns-trace"))]
 mod android_log {
     #[link(name = "log")]

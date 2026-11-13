@@ -109,7 +109,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
             val serviceIntent = Intent(getApplication(), MyVpnService::class.java).apply {
                 this.action = action
             }
-            if (enabled && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            if (enabled) {
                 getApplication<Application>().startForegroundService(serviceIntent)
             } else {
                 getApplication<Application>().startService(serviceIntent)
@@ -471,11 +471,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
                 val serviceIntent = Intent(getApplication(), MyVpnService::class.java).apply {
                     action = MyVpnService.ACTION_FLUSH_DNS_CACHE
                 }
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    getApplication<Application>().startForegroundService(serviceIntent)
-                } else {
-                    getApplication<Application>().startService(serviceIntent)
-                }
+                getApplication<Application>().startForegroundService(serviceIntent)
             }
         }
     }
@@ -552,9 +548,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         )
 
     /**
-     * Triggers a fresh download and parse of all enabled blocklists via
-     * [BlocklistRepository.loadAndCompileBlocklists]. Pulls the latest custom
-     * source URLs from [UserPreferences] and merges them with the built-in lists.
+     * Triggers a fresh download and parse of all blocklist sources via
+     * [BlocklistRepository.loadAndCompileBlocklists], which reads the latest
+     * source URLs from [UserPreferences].
      * Ignores the call if a refresh is already in progress.
      */
     fun refreshBlocklists() {
