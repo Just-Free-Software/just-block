@@ -31,7 +31,7 @@ class UserPreferences(private val context: Context) {
         /**
          * Stores the active upstream as a single encoded string.
          * Encoding format is defined in [UpstreamConfig.encode] / [UpstreamConfig.decode].
-         * Example value: "94.140.14.14|853|dns.adguard-dns.com|https://dns.adguard-dns.com/dns-query"
+         * Example value: "94.140.14.14\tdns.adguard-dns.com"
          */
         val UPSTREAM_CONFIG        = stringPreferencesKey("upstream_config")
         val IS_BLOCKING_ENABLED    = booleanPreferencesKey("is_blocking_enabled")

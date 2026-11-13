@@ -26,7 +26,7 @@ else()
 endif()
 
 add_custom_target(cargo_build_always ALL
-    COMMAND ${CMAKE_COMMAND} -E env ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK} PATH=$ENV{PATH}:/home/me/.cargo/bin cargo ndk -t ${ANDROID_ABI} build --release ${RUST_CARGO_FEATURES}
+    COMMAND ${CMAKE_COMMAND} -E env ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK} PATH=$ENV{PATH}:$ENV{HOME}/.cargo/bin cargo ndk -t ${ANDROID_ABI} build --release ${RUST_CARGO_FEATURES}
     WORKING_DIRECTORY ${RUST_DIR}
     COMMENT "Building Rust library for ABI ${ANDROID_ABI}"
 )
