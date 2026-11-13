@@ -681,6 +681,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_stop(
     ): Int
+    external fun uniffi_just_block_rust_checksum_method_dnsproxy_stop_and_wait(
+    ): Int
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_update_allowlist(
     ): Int
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_update_blocklist(
@@ -721,6 +723,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_just_block_rust_fn_method_dnsproxy_stop(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_just_block_rust_fn_method_dnsproxy_stop_and_wait(`ptr`: Long,`timeoutMs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
     external fun uniffi_just_block_rust_fn_method_dnsproxy_update_allowlist(`ptr`: Long,`domains`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_just_block_rust_fn_method_dnsproxy_update_blocklist(`ptr`: Long,`domains`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -853,6 +857,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_stop() and 0xFFFF) != 15748) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_stop_and_wait() and 0xFFFF) != 64423) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_update_allowlist() and 0xFFFF) != 6744) {
@@ -1050,6 +1057,29 @@ public object FfiConverterInt: FfiConverter<Int, Int> {
 /**
  * @suppress
  */
+public object FfiConverterULong: FfiConverter<ULong, Long> {
+    override fun lift(value: Long): ULong {
+        return value.toULong()
+    }
+
+    override fun read(buf: ByteBuffer): ULong {
+        return lift(buf.getLong())
+    }
+
+    override fun lower(value: ULong): Long {
+        return value.toLong()
+    }
+
+    override fun allocationSize(value: ULong) = 8UL
+
+    override fun write(value: ULong, buf: ByteBuffer) {
+        buf.putLong(value.toLong())
+    }
+}
+
+/**
+ * @suppress
+ */
 public object FfiConverterLong: FfiConverter<Long, Long> {
     override fun lift(value: Long): Long {
         return value
@@ -1067,6 +1097,29 @@ public object FfiConverterLong: FfiConverter<Long, Long> {
 
     override fun write(value: Long, buf: ByteBuffer) {
         buf.putLong(value)
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterBoolean: FfiConverter<Boolean, Byte> {
+    override fun lift(value: Byte): Boolean {
+        return value.toInt() != 0
+    }
+
+    override fun read(buf: ByteBuffer): Boolean {
+        return lift(buf.get())
+    }
+
+    override fun lower(value: Boolean): Byte {
+        return if (value) 1.toByte() else 0.toByte()
+    }
+
+    override fun allocationSize(value: Boolean) = 1UL
+
+    override fun write(value: Boolean, buf: ByteBuffer) {
+        buf.put(lower(value))
     }
 }
 
@@ -1245,6 +1298,18 @@ public interface DnsProxyInterface {
      * cancellation token per run.
      */
     fun `stop`()
+    
+    /**
+     * Like [stop](Self::stop), but blocks until the proxy task has exited
+     * and released the TUN fd, or `timeout_ms` elapses. Returns true when
+     * the task is gone (or none was running) and false on timeout.
+     *
+     * The Android side calls this before starting another proxy on the
+     * same TUN fd, or before closing the TUN, so the old task's reactor
+     * registration can never collide with the next one. Blocking: never
+     * call it from the main thread or from inside the Tokio runtime.
+     */
+    fun `stopAndWait`(`timeoutMs`: kotlin.ULong): kotlin.Boolean
     
     /**
      * Replaces the allowlist (user-whitelisted domains). An allowlisted
@@ -1430,6 +1495,30 @@ open class DnsProxy: Disposable, AutoCloseable, DnsProxyInterface
 }
     }
     
+    
+
+    
+    /**
+     * Like [stop](Self::stop), but blocks until the proxy task has exited
+     * and released the TUN fd, or `timeout_ms` elapses. Returns true when
+     * the task is gone (or none was running) and false on timeout.
+     *
+     * The Android side calls this before starting another proxy on the
+     * same TUN fd, or before closing the TUN, so the old task's reactor
+     * registration can never collide with the next one. Blocking: never
+     * call it from the main thread or from inside the Tokio runtime.
+     */override fun `stopAndWait`(`timeoutMs`: kotlin.ULong): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_method_dnsproxy_stop_and_wait(
+        it,
+        
+        FfiConverterULong.lower(`timeoutMs`),_status)
+}
+    }
+    )
+    }
     
 
     

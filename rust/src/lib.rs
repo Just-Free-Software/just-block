@@ -56,6 +56,10 @@ const FAILED_UPSTREAM_BACKOFF: Duration = Duration::from_secs(30);
 struct RunSlot {
     generation: u64,
     token: Option<CancellationToken>,
+    /// Disconnects once the current run's task has fully exited and released
+    /// the TUN fd (its sender is dropped as the task's last act). Lets
+    /// [DnsProxy::stop_and_wait] block until the fd is safe to reuse.
+    exited: Option<std::sync::mpsc::Receiver<()>>,
 }
 
 /// A backup upstream reachable over DoH3 (DNS over HTTP/3, RFC 8484 body
@@ -202,10 +206,45 @@ impl DnsProxy {
         }
     }
 
+    /// Like [stop](Self::stop), but blocks until the proxy task has exited
+    /// and released the TUN fd, or `timeout_ms` elapses. Returns true when
+    /// the task is gone (or none was running) and false on timeout.
+    ///
+    /// The Android side calls this before starting another proxy on the
+    /// same TUN fd, or before closing the TUN, so the old task's reactor
+    /// registration can never collide with the next one. Blocking: never
+    /// call it from the main thread or from inside the Tokio runtime.
+    pub fn stop_and_wait(&self, timeout_ms: u64) -> bool {
+        let (generation, exited) = {
+            let mut slot = self.lock_run_slot();
+            if let Some(token) = slot.token.take() {
+                token.cancel();
+            }
+            (slot.generation, slot.exited.take())
+        };
+        let Some(exited) = exited else {
+            return true;
+        };
+        // The task never sends; recv only returns once its sender is dropped.
+        match exited.recv_timeout(Duration::from_millis(timeout_ms)) {
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                // Still running: keep the receiver so a later call can wait
+                // again, unless a newer run has replaced it.
+                let mut slot = self.lock_run_slot();
+                if slot.generation == generation && slot.exited.is_none() {
+                    slot.exited = Some(exited);
+                }
+                false
+            }
+            _ => true,
+        }
+    }
+
     /// Starts the proxy task. Idempotent: if a task is already running
     /// (and has not been stopped), this is a no-op — it can never spawn a
     /// second reader on the same TUN fd.
     pub fn start(&self) {
+        let (exit_tx, exit_rx) = std::sync::mpsc::channel::<()>();
         let (generation, cancel_token) = {
             let mut slot = self.lock_run_slot();
             if let Some(token) = &slot.token {
@@ -216,6 +255,7 @@ impl DnsProxy {
             slot.generation += 1;
             let token = CancellationToken::new();
             slot.token = Some(token.clone());
+            slot.exited = Some(exit_rx);
             (slot.generation, token)
         };
 
@@ -231,10 +271,15 @@ impl DnsProxy {
             // Clear the slot on exit (both natural exit and cancellation) so
             // a subsequent start() works. The generation check ensures a
             // stale task never clears a newer run's token.
-            let mut slot = run_slot.lock().unwrap_or_else(|e| e.into_inner());
-            if slot.generation == generation {
-                slot.token = None;
+            {
+                let mut slot = run_slot.lock().unwrap_or_else(|e| e.into_inner());
+                if slot.generation == generation {
+                    slot.token = None;
+                }
             }
+            // Last act: run_proxy has returned, so its AsyncFd is dropped
+            // and the TUN fd is deregistered. Wakes stop_and_wait.
+            drop(exit_tx);
         });
     }
 
@@ -803,131 +848,170 @@ async fn run_proxy(
 
     loop {
         tokio::select! {
-            _ = cancel_token.cancelled() => {
-                break;
-            }
+            _ = cancel_token.cancelled() => break,
             Some(packet) = rx.recv() => {
-                if let Err(_e) = write_tun(&async_fd, &packet).await {
-                    // A failed write drops this response but must not kill
-                    // the proxy — read errors handle a genuinely dead TUN.
-                    log_trace!(&format!("TUN write failed (dropping packet): {}", _e));
+                // Cancellable, so a TUN that never becomes writable can't
+                // keep a stopped proxy alive.
+                tokio::select! {
+                    _ = cancel_token.cancelled() => break,
+                    res = write_tun(&async_fd, &packet) => {
+                        if let Err(_e) = res {
+                            // A failed write drops this response but must not
+                            // kill the proxy — read errors handle a genuinely
+                            // dead TUN.
+                            log_trace!(&format!("TUN write failed (dropping packet): {}", _e));
+                        }
+                    }
                 }
             }
             res = async_fd.readable() => {
-                let mut guard = match res {
-                    Ok(g) => g,
-                    Err(_) => continue,
+                let Ok(mut guard) = res else { continue };
+
+                let n = unsafe {
+                    libc::read(tun_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
                 };
-
-        match unsafe { libc::read(tun_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) } {
-            n if n > 0 => {
-                let n = n as usize;
-                let pkt = &buf[..n];
-
-                if let Ok(sliced) = SlicedPacket::from_ip(pkt) {
-                    if let Some(TransportSlice::Udp(udp)) = sliced.transport.as_ref() {
-                        if udp.destination_port() == 53 {
-                            let payload = udp.payload();
-                            if let Some(trie_key) = parse_query(payload) {
-                                let blocked = should_block(
-                                    &blocklist.read().unwrap_or_else(|e| e.into_inner()),
-                                    &allowlist.read().unwrap_or_else(|e| e.into_inner()),
-                                    &pauses.read().unwrap_or_else(|e| e.into_inner()),
-                                    &trie_key,
-                                );
-
-                                if blocked {
-                                    log_trace!(&format!("BLOCKED {} -> NXDOMAIN", qname_str(payload)));
-                                    // Re-parse is intentional and cheap: the builders need
-                                    // the full Message, not just the derived keys.
-                                    if let Ok(query) = domain::base::message::Message::from_slice(payload) {
-                                        if let Some(null_resp) = build_null_response(&query) {
-                                            // Wrap in IP/UDP headers before writing to the TUN —
-                                            // a bare DNS payload is not a valid TUN packet.
-                                            if let Some(resp) = create_forwarded_response(&sliced, payload, &null_resp) {
-                                                // Read-loop sends must not block on a full
-                                                // channel; dropping is the deliberate policy.
-                                                if tx.try_send(resp).is_err() {
-                                                    log_trace!("response channel full — dropped NXDOMAIN");
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    // Forward upstream (spawned task owns all it needs)
-                                    log_trace!(&format!("FORWARD {}", qname_str(payload)));
-                                    match semaphore.clone().try_acquire_owned() {
-                                        Ok(permit) => {
-                                        let upstreams = upstreams.clone();
-                                        let payload_vec = payload.to_vec();
-                                        let req_ip = pkt.to_vec();
-                                        let tx_clone = tx.clone();
-                                        let task_token = cancel_token.clone();
-                                        tokio::spawn(async move {
-                                            let _permit = permit;
-                                            tokio::select! {
-                                                _ = task_token.cancelled() => {}
-                                                _ = forward_query(
-                                                    &upstreams,
-                                                    &payload_vec,
-                                                    &req_ip,
-                                                    &tx_clone,
-                                                ) => {}
-                                            }
-                                        });
-                                        }
-                                        Err(_) => {
-                                            // Semaphore full: return SERVFAIL immediately
-                                            // to prevent app hangs
-                                            if let Ok(query) = domain::base::message::Message::from_slice(payload) {
-                                                if let Some(servfail) = build_servfail_response(&query) {
-                                                    if let Some(resp) = create_forwarded_response(&sliced, payload, &servfail) {
-                                                        if tx.try_send(resp).is_err() {
-                                                            log_trace!("response channel full — dropped SERVFAIL");
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            // Non-DNS UDP to the VPN's fake DNS addresses:
-                            // drop silently (no ICMP amplification).
-                        }
-                    } else if let Some(TransportSlice::Tcp(_)) = sliced.transport.as_ref() {
-                        // Deliberate policy: only DNS (UDP/53) is proxied.
-                        // DNS-over-TCP is not supported, and nothing else is
-                        // expected to reach the TUN (only the fake DNS
-                        // addresses are routed into it), so all TCP gets a
-                        // RST rather than being silently blackholed.
-                        if let Some(resp) = create_tcp_rst(&sliced) {
-                            if tx.try_send(resp).is_err() {
-                                log_trace!("response channel full — dropped TCP RST");
-                            }
-                        }
+                if n < 0 {
+                    let err = std::io::Error::last_os_error();
+                    if err.kind() == std::io::ErrorKind::WouldBlock {
+                        guard.clear_ready();
+                        continue;
                     }
-                    // All other traffic (ICMP, etc.): drop.
-                }
-            }
-            n if n < 0 => {
-                let err = std::io::Error::last_os_error();
-                if err.kind() == std::io::ErrorKind::WouldBlock {
-                    guard.clear_ready();
-                } else {
                     log_trace!(&format!("Read error: {}", err));
                     break;
                 }
-            }
-            _ => {
-                log_trace!("TUN closed / EOF");
-                break;
+                if n == 0 {
+                    log_trace!("TUN closed / EOF");
+                    break;
+                }
+                let pkt = &buf[..n as usize];
+
+                let action = classify_packet(
+                    pkt,
+                    &blocklist.read().unwrap_or_else(|e| e.into_inner()),
+                    &allowlist.read().unwrap_or_else(|e| e.into_inner()),
+                    &pauses.read().unwrap_or_else(|e| e.into_inner()),
+                );
+                match action {
+                    PacketAction::Respond(resp) => try_respond(&tx, resp),
+                    PacketAction::Forward(payload) => {
+                        match semaphore.clone().try_acquire_owned() {
+                            Ok(permit) => {
+                                // The spawned task owns everything it needs.
+                                let upstreams = upstreams.clone();
+                                let req_ip = pkt.to_vec();
+                                let tx = tx.clone();
+                                let task_token = cancel_token.clone();
+                                tokio::spawn(async move {
+                                    let _permit = permit;
+                                    tokio::select! {
+                                        _ = task_token.cancelled() => {}
+                                        _ = forward_query(&upstreams, &payload, &req_ip, &tx) => {}
+                                    }
+                                });
+                            }
+                            Err(_) => {
+                                // Too many queries in flight: answer SERVFAIL
+                                // now rather than leave the app hanging.
+                                if let Some(resp) = local_response_for(pkt, &payload, LocalAnswer::Servfail) {
+                                    try_respond(&tx, resp);
+                                }
+                            }
+                        }
+                    }
+                    PacketAction::Drop => {}
+                }
             }
         }
-            } // end res = async_fd.readable()
-        } // end tokio::select!
-    } // end loop
+    }
+}
+
+/// What the read loop should do with one packet read from the TUN.
+#[cfg_attr(test, derive(Debug))]
+enum PacketAction {
+    /// Write this complete IP packet back to the TUN.
+    Respond(Vec<u8>),
+    /// Forward this DNS payload upstream.
+    Forward(Vec<u8>),
+    /// Ignore the packet.
+    Drop,
+}
+
+/// Decides what to do with one raw IP packet from the TUN. Pure: no I/O, no
+/// clock beyond the lazy pause check, so the policy is testable on its own.
+///
+/// Only DNS over UDP/53 is proxied. DNS-over-TCP is deliberately not
+/// supported, and nothing else is expected to reach the TUN (only the fake
+/// DNS addresses are routed into it), so all TCP gets a RST rather than
+/// being silently blackholed. Non-DNS UDP, ICMP and anything unparseable
+/// are dropped silently (no ICMP amplification).
+fn classify_packet(
+    pkt: &[u8],
+    blocklist: &Trie<Vec<u8>, ()>,
+    allowlist: &Trie<Vec<u8>, ()>,
+    pauses: &Trie<Vec<u8>, i64>,
+) -> PacketAction {
+    let Ok(sliced) = SlicedPacket::from_ip(pkt) else {
+        return PacketAction::Drop;
+    };
+    match sliced.transport.as_ref() {
+        Some(TransportSlice::Udp(udp)) => {
+            if udp.destination_port() != 53 {
+                return PacketAction::Drop;
+            }
+            let payload = udp.payload();
+            let Some(trie_key) = parse_query(payload) else {
+                return PacketAction::Drop;
+            };
+            if should_block(blocklist, allowlist, pauses, &trie_key) {
+                log_trace!(&format!("BLOCKED {} -> NXDOMAIN", qname_str(payload)));
+                local_response(&sliced, payload, LocalAnswer::Nxdomain)
+                    .map_or(PacketAction::Drop, PacketAction::Respond)
+            } else {
+                log_trace!(&format!("FORWARD {}", qname_str(payload)));
+                PacketAction::Forward(payload.to_vec())
+            }
+        }
+        Some(TransportSlice::Tcp(_)) => {
+            create_tcp_rst(&sliced).map_or(PacketAction::Drop, PacketAction::Respond)
+        }
+        _ => PacketAction::Drop,
+    }
+}
+
+/// An answer the proxy generates itself instead of asking an upstream.
+#[derive(Clone, Copy)]
+enum LocalAnswer {
+    /// The domain is blocked.
+    Nxdomain,
+    /// The query can't be forwarded (overload, or every upstream failed).
+    Servfail,
+}
+
+/// Builds a locally generated DNS answer to `payload` and wraps it in IP/UDP
+/// headers mirrored from the request — a bare DNS payload is not a valid TUN
+/// packet. The payload is re-parsed on purpose: the builders need the full
+/// message, which is cheap to get again.
+fn local_response(sliced: &SlicedPacket, payload: &[u8], answer: LocalAnswer) -> Option<Vec<u8>> {
+    let query = domain::base::message::Message::from_slice(payload).ok()?;
+    let dns = match answer {
+        LocalAnswer::Nxdomain => build_null_response(query)?,
+        LocalAnswer::Servfail => build_servfail_response(query)?,
+    };
+    create_forwarded_response(sliced, payload, &dns)
+}
+
+/// [local_response] for callers holding the raw request packet.
+fn local_response_for(req_ip: &[u8], payload: &[u8], answer: LocalAnswer) -> Option<Vec<u8>> {
+    let sliced = SlicedPacket::from_ip(req_ip).ok()?;
+    local_response(&sliced, payload, answer)
+}
+
+/// Queues a response from the read loop. The loop must never block on a
+/// full channel, so dropping the packet is the deliberate policy.
+fn try_respond(tx: &mpsc::Sender<Vec<u8>>, resp: Vec<u8>) {
+    if tx.try_send(resp).is_err() {
+        log_trace!("response channel full — dropped a response");
+    }
 }
 
 /// Forwards one DNS query upstream and delivers the response on `tx`.
@@ -1013,14 +1097,8 @@ async fn forward_query(
 /// Builds a SERVFAIL answer, wraps it in IP/UDP headers from the original
 /// request packet, and delivers it on `tx`.
 async fn send_servfail(req_ip: &[u8], payload: &[u8], tx: &mpsc::Sender<Vec<u8>>) {
-    if let Ok(query) = domain::base::message::Message::from_slice(payload) {
-        if let Some(servfail) = build_servfail_response(&query) {
-            if let Ok(sliced) = SlicedPacket::from_ip(req_ip) {
-                if let Some(resp) = create_forwarded_response(&sliced, payload, &servfail) {
-                    let _ = tx.send(resp).await;
-                }
-            }
-        }
+    if let Some(resp) = local_response_for(req_ip, payload, LocalAnswer::Servfail) {
+        let _ = tx.send(resp).await;
     }
 }
 
@@ -1175,6 +1253,176 @@ mod tests {
         let pauses = trie_from(&[]);
         assert!(should_block(&block, &allow, &pauses, &key("sub.example.com")));
         assert!(!should_block(&block, &allow, &pauses, &key("other.com")));
+    }
+}
+
+/// Tests for the packet policy and for the proxy loop itself, driven over a
+/// Unix datagram socket pair standing in for the TUN fd (one datagram per
+/// read, like a TUN). No network: the proxies here have no upstreams, so a
+/// forwarded query is answered SERVFAIL locally.
+#[cfg(test)]
+mod loop_tests {
+    use super::*;
+    use crate::wire_test_util::make_query;
+    use domain::base::iana::Rcode;
+    use std::os::fd::AsRawFd;
+    use std::os::unix::net::UnixDatagram;
+
+    fn udp_packet(payload: &[u8], port: u16) -> Vec<u8> {
+        let mut packet = Vec::new();
+        etherparse::PacketBuilder::ipv4([10, 0, 0, 2], [10, 0, 0, 1], 64)
+            .udp(33333, port)
+            .write(&mut packet, payload)
+            .unwrap();
+        packet
+    }
+
+    fn rcode_of(packet: &[u8]) -> Rcode {
+        let sliced = SlicedPacket::from_ip(packet).expect("valid IP packet");
+        match sliced.transport.as_ref() {
+            Some(TransportSlice::Udp(udp)) => {
+                domain::base::message::Message::from_slice(udp.payload())
+                    .unwrap()
+                    .header()
+                    .rcode()
+            }
+            _ => panic!("expected a UDP response"),
+        }
+    }
+
+    fn tries(block: &[&str]) -> (Trie<Vec<u8>, ()>, Trie<Vec<u8>, ()>, Trie<Vec<u8>, i64>) {
+        (
+            domain_trie(block.iter().map(|d| d.to_string()).collect()),
+            Trie::new(),
+            Trie::new(),
+        )
+    }
+
+    #[test]
+    fn blocked_query_is_answered_nxdomain() {
+        let (block, allow, pauses) = tries(&["example.com"]);
+        let pkt = udp_packet(&make_query("ads.example.com"), 53);
+        match classify_packet(&pkt, &block, &allow, &pauses) {
+            PacketAction::Respond(resp) => assert_eq!(rcode_of(&resp), Rcode::NXDOMAIN),
+            other => panic!("expected Respond, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn allowed_query_is_forwarded_unchanged() {
+        let (block, allow, pauses) = tries(&["example.com"]);
+        let query = make_query("other.com");
+        let pkt = udp_packet(&query, 53);
+        match classify_packet(&pkt, &block, &allow, &pauses) {
+            PacketAction::Forward(payload) => assert_eq!(payload, query),
+            other => panic!("expected Forward, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn non_dns_and_garbage_are_dropped() {
+        let (block, allow, pauses) = tries(&["example.com"]);
+        let not_port_53 = udp_packet(&make_query("example.com"), 5353);
+        let not_dns = udp_packet(&[1, 2, 3], 53);
+        for pkt in [&not_port_53[..], &not_dns[..], &[0u8; 4][..], &[][..]] {
+            assert!(matches!(
+                classify_packet(pkt, &block, &allow, &pauses),
+                PacketAction::Drop
+            ));
+        }
+    }
+
+    #[test]
+    fn tcp_is_answered_with_a_rst() {
+        let (block, allow, pauses) = tries(&[]);
+        let mut pkt = Vec::new();
+        etherparse::PacketBuilder::ipv4([10, 0, 0, 2], [10, 0, 0, 1], 64)
+            .tcp(40000, 53, 1, 1024)
+            .syn()
+            .write(&mut pkt, &[])
+            .unwrap();
+        match classify_packet(&pkt, &block, &allow, &pauses) {
+            PacketAction::Respond(resp) => {
+                let sliced = SlicedPacket::from_ip(&resp).unwrap();
+                match sliced.transport.as_ref() {
+                    Some(TransportSlice::Tcp(tcp)) => assert!(tcp.rst()),
+                    _ => panic!("expected a TCP response"),
+                }
+            }
+            other => panic!("expected Respond, got {other:?}"),
+        }
+    }
+
+    /// A proxy with no upstreams on one end of a socket pair; the test
+    /// plays the device on the other end.
+    fn fake_tun() -> (UnixDatagram, UnixDatagram, Arc<DnsProxy>) {
+        let (device, tun) = UnixDatagram::pair().unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let proxy = DnsProxy::new(tun.as_raw_fd(), None, None, String::new(), Vec::new());
+        proxy.update_blocklist(vec!["example.com".to_string()]);
+        (device, tun, proxy)
+    }
+
+    fn ask(device: &UnixDatagram, domain: &str) -> Rcode {
+        device.send(&udp_packet(&make_query(domain), 53)).unwrap();
+        let mut buf = [0u8; 2048];
+        let n = device.recv(&mut buf).expect("no response from the proxy");
+        rcode_of(&buf[..n])
+    }
+
+    const WAIT_MS: u64 = 5_000;
+
+    #[test]
+    fn loop_answers_blocked_and_unforwardable_queries() {
+        let (device, _tun, proxy) = fake_tun();
+        proxy.start();
+        assert_eq!(ask(&device, "ads.example.com"), Rcode::NXDOMAIN);
+        // Not blocked, but there is no upstream to forward to.
+        assert_eq!(ask(&device, "other.com"), Rcode::SERVFAIL);
+        assert!(proxy.stop_and_wait(WAIT_MS));
+    }
+
+    #[test]
+    fn stop_and_wait_without_a_running_task_returns_immediately() {
+        let (_device, _tun, proxy) = fake_tun();
+        assert!(proxy.stop_and_wait(WAIT_MS));
+        proxy.start();
+        assert!(proxy.stop_and_wait(WAIT_MS));
+        // Already stopped: nothing left to wait for.
+        assert!(proxy.stop_and_wait(0));
+    }
+
+    /// The point of stop_and_wait: once it returns true the fd is free, so
+    /// a new proxy on the same fd works at once (this is what the Android
+    /// side does on a network change).
+    #[test]
+    fn fd_is_reusable_as_soon_as_stop_and_wait_returns() {
+        let (device, tun, first) = fake_tun();
+        first.start();
+        assert_eq!(ask(&device, "example.com"), Rcode::NXDOMAIN);
+
+        for _ in 0..20 {
+            assert!(first.stop_and_wait(WAIT_MS));
+            // No reactor registration may be left on the fd.
+            let registered = {
+                let _guard = get_runtime().enter();
+                // SAFETY: `tun` is open and outlives this registration.
+                unsafe { AsyncFd::register(tun.as_raw_fd()) }
+            };
+            assert!(registered.is_ok(), "fd still registered after stop_and_wait");
+            drop(registered);
+            first.start();
+            assert_eq!(ask(&device, "example.com"), Rcode::NXDOMAIN);
+        }
+        assert!(first.stop_and_wait(WAIT_MS));
+
+        let second = DnsProxy::new(tun.as_raw_fd(), None, None, String::new(), Vec::new());
+        second.update_blocklist(vec!["blocked.test".to_string()]);
+        second.start();
+        assert_eq!(ask(&device, "blocked.test"), Rcode::NXDOMAIN);
+        assert!(second.stop_and_wait(WAIT_MS));
     }
 }
 
