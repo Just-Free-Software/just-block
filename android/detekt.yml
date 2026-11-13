@@ -1,0 +1,42 @@
+# Overrides on top of detekt's default rule set (buildUponDefaultConfig).
+
+naming:
+  FunctionNaming:
+    # Composables are PascalCase by convention.
+    ignoreAnnotated: ['Composable']
+  TopLevelPropertyNaming:
+    # Compose theme colours and similar constants are PascalCase.
+    constantPattern: '[A-Z][A-Za-z0-9_]*'
+
+complexity:
+  TooManyFunctions:
+    # The service, the ViewModel and the preferences wrapper are each one
+    # cohesive class with many small entry points.
+    thresholdInClasses: 30
+  LongMethod:
+    # Composables are long by nature: they are layout, not logic.
+    ignoreAnnotated: ['Composable']
+  LongParameterList:
+    ignoreAnnotated: ['Composable']
+  CyclomaticComplexMethod:
+    ignoreAnnotated: ['Composable']
+
+style:
+  ReturnCount:
+    # Early returns for invalid input are the house style.
+    max: 4
+    excludeGuardClauses: true
+  MagicNumber:
+    # dp/sp values and colours in UI code are not magic numbers.
+    ignoreAnnotated: ['Composable']
+    ignorePropertyDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+  UnusedPrivateMember:
+    ignoreAnnotated: ['Preview']
+
+exceptions:
+  TooGenericExceptionCaught:
+    # Every broad catch here is a top-level boundary (service startup, the
+    # FFI call into Rust, a blocklist refresh) that logs and recovers, and
+    # each rethrows CancellationException first.
+    active: false
