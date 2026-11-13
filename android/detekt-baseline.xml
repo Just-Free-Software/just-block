@@ -1,0 +1,14 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:BlocklistRepository.kt$BlocklistFetcher$internal fun parseCapped(input: java.io.InputStream): Set&lt;String&gt;?</ID>
+    <ID>CyclomaticComplexMethod:BlocklistRepository.kt$BlocklistRepository$private suspend fun loadAndCompile()</ID>
+    <ID>CyclomaticComplexMethod:BlocklistRepository.kt$FilterParser$fun parse(rawLine: String): String?</ID>
+    <ID>LongMethod:BlocklistRepository.kt$BlocklistRepository$private suspend fun loadAndCompile()</ID>
+    <ID>LongMethod:MainActivity.kt$MainActivity$override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>LongMethod:MyVpnService.kt$MyVpnService$private fun startVpn()</ID>
+    <ID>LongMethod:MyVpnService.kt$MyVpnService$private suspend fun startTunLoop(tun: ParcelFileDescriptor)</ID>
+    <ID>NestedBlockDepth:BlocklistRepository.kt$BlocklistFetcher$internal fun parseCapped(input: java.io.InputStream): Set&lt;String&gt;?</ID>
+  </CurrentIssues>
+</SmellBaseline>
