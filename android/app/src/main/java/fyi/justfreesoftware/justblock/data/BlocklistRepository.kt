@@ -46,12 +46,6 @@ sealed interface FetchResult {
     data class Failed(val problem: SourceProblem) : FetchResult
 }
 
-data class FilterSource(
-    val url: String,
-    val enabled: Boolean = true
-)
-
-
 
 /**
  * Turns blocklist lines into bare domains.
@@ -360,20 +354,18 @@ class BlocklistRepository(
 
             // 2. Network Load: Fetch latest remote blocklists in the background
             val remoteCompiled = HashSet<String>(250_000)
-            val allSources = customUrls.map { FilterSource(it) }
             val issues = HashMap<String, SourceIssue>()
             val toSave = ArrayList<Pair<String, Set<String>>>()
 
             kotlinx.coroutines.supervisorScope {
-                allSources
-                    .filter { it.enabled }
-                    .map { source -> 
-                        async { 
-                            source.url to try {
-                                fetcher.fetch(source.url)
+                customUrls
+                    .map { url ->
+                        async {
+                            url to try {
+                                fetcher.fetch(url)
                             } catch (e: Exception) {
                                 if (e is kotlinx.coroutines.CancellationException) throw e
-                                Log.e(TAG, "Failed to fetch source: ${source.url}", e)
+                                Log.e(TAG, "Failed to fetch source: $url", e)
                                 FetchResult.Failed(SourceProblem.DOWNLOAD_FAILED)
                             }
                         } 

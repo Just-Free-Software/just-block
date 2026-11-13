@@ -40,7 +40,7 @@ class DnsFilter {
      * ([Long.MAX_VALUE] for indefinite pauses).
      *
      * A paused domain stays in the persisted manual-blocked list but is
-     * removed from the live [blocklist] so [shouldBlock] won't match it.
+     * removed from the live [blocklist] so the proxy won't block it.
      * When the pause expires (or the user resumes), the domain is moved
      * back into the live blocklist.
      */
@@ -126,8 +126,8 @@ class DnsFilter {
      * Pauses blocking for [domain] until [expiresAt] epoch millis.
      * Use [Long.MAX_VALUE] for an indefinite pause.
      *
-     * The domain is removed from the live blocklist so [shouldBlock] will
-     * not match it.  It remains in the persisted manual-blocked list so
+     * The domain is removed from the live blocklist so the proxy will
+     * not block it.  It remains in the persisted manual-blocked list so
      * the user can resume later.
      */
     @Synchronized

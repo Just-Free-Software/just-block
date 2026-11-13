@@ -689,7 +689,7 @@ class MyVpnService : VpnService() {
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL)
             .setContentTitle("Just Block is active")
             .setContentText("Blocking ads and trackers")
-            .setSmallIcon(android.R.drawable.ic_lock_lock)  // Replace with your own icon
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(openAppIntent)
             .setOngoing(true)
             .setNumber(0)
