@@ -25,9 +25,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -35,7 +32,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,12 +62,9 @@ fun HomeScreen(
     val isBlockingEnabled by viewModel.isBlockingEnabled.collectAsState()
     val isStartOnBoot     by viewModel.isStartOnBoot.collectAsState()
     val blocklistState    by viewModel.blocklistState.collectAsState()
-    val pendingRestart    by viewModel.pendingRestartReason.collectAsState()
-    val upstream          by viewModel.upstreamConfig.collectAsState()
     val customUrls        by viewModel.customSourceUrls.collectAsState()
     val manualBlocked     by viewModel.manualBlockedDomains.collectAsState()
     val whitelisted       by viewModel.whitelistedDomains.collectAsState()
-    val snackbarHost      = remember { SnackbarHostState() }
     var showInfoDialog    by remember { mutableStateOf(false) }
 
     if (showInfoDialog) {
@@ -106,21 +99,9 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(pendingRestart) {
-        if (pendingRestart != null) {
-            val result = snackbarHost.showSnackbar(
-                message     = "Restart VPN to apply changes",
-                actionLabel = "Restart",
-            )
-            if (result == SnackbarResult.ActionPerformed) viewModel.restartVpn()
-            else viewModel.dismissRestartBanner()
-        }
-    }
-
     Scaffold(
         modifier = modifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(snackbarHost) }
     ) { scaffoldPadding ->
         LazyColumn(
             modifier            = Modifier

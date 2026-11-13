@@ -5,7 +5,6 @@ import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import fyi.justfreesoftware.justblock.ServiceLocator
-import fyi.justfreesoftware.justblock.core.UpstreamConfig
 import fyi.justfreesoftware.justblock.core.MyVpnService
 import fyi.justfreesoftware.justblock.data.BlocklistRepository
 import fyi.justfreesoftware.justblock.data.BlocklistState
@@ -184,68 +183,6 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setHasSeenWelcome(seen: Boolean) {
         viewModelScope.launch { prefs.setHasSeenWelcome(seen) }
-    }
-
-    // -------------------------------------------------------------------------
-    // Upstream DNS config
-    // -------------------------------------------------------------------------
-
-    /**
-     * The currently saved upstream resolver.
-     * The UI uses this to show which resolver is active and pre-populate the
-     * settings screen. [MyVpnService] reads this independently via DataStore
-     * on start — the ViewModel doesn't push it to the service directly.
-     */
-    val upstreamConfig: StateFlow<UpstreamConfig> = prefs.upstreamConfigFlow
-        .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = UserPreferences.DEFAULT_UPSTREAM,
-        )
-
-    /**
-     * Saves a new upstream resolver.
-     *
-     * If the VPN is currently running, a restart is required for the change to
-     * take effect. The UI should surface this via [pendingRestartReason].
-     */
-    fun setUpstreamConfig(config: UpstreamConfig) {
-        viewModelScope.launch {
-            prefs.setUpstreamConfig(config)
-            if (isVpnEnabled.value) {
-                _pendingRestartReason.update { PendingRestartReason.UPSTREAM_CHANGED }
-            }
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Pending restart banner
-    // -------------------------------------------------------------------------
-
-    /**
-     * Set when a settings change requires a VPN restart to take effect.
-     * The UI should show a non-intrusive banner ("Restart VPN to apply changes")
-     * while this is non-null, and clear it once the user restarts or dismisses.
-     */
-    enum class PendingRestartReason { UPSTREAM_CHANGED }
-
-    private val _pendingRestartReason = MutableStateFlow<PendingRestartReason?>(null)
-    val pendingRestartReason: StateFlow<PendingRestartReason?> = _pendingRestartReason.asStateFlow()
-
-    fun dismissRestartBanner() {
-        _pendingRestartReason.update { null }
-    }
-
-    /**
-     * Restarts the VPN to apply pending settings changes, then clears the banner.
-     */
-    fun restartVpn() {
-        viewModelScope.launch {
-            setVpnEnabled(false)
-            delay(500) // Give the service time to tear down the TUN interface
-            setVpnEnabled(true)
-            _pendingRestartReason.update { null }
-        }
     }
 
     // -------------------------------------------------------------------------
