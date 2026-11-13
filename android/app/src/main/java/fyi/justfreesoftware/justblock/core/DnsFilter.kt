@@ -3,6 +3,8 @@ package fyi.justfreesoftware.justblock.core
 import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 
+private const val TAG = "DnsFilter"
+
 /**
  * Manages the live state of the blocklist, including user-added rules and temporary pauses.
  *
@@ -10,8 +12,6 @@ import java.util.concurrent.ConcurrentHashMap
  * DnsProxy via the [rustProxyCallback], which handles the actual DNS packet filtering.
  */
 class DnsFilter {
-    private val TAG = "DnsFilter"
-
     @Volatile
     private var blocklist: Set<String> = emptySet()
 

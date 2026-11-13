@@ -181,7 +181,11 @@ fun AppsTab(
                                     snackbarHostState.currentSnackbarData?.dismiss()
                                     snackbarHostState.showSnackbar(
                                         message = resources.getString(
-                                            if (checked) R.string.apps_added_to_bypass else R.string.apps_removed_from_bypass,
+                                            if (checked) {
+                                                R.string.apps_added_to_bypass
+                                            } else {
+                                                R.string.apps_removed_from_bypass
+                                            },
                                             app.label
                                         ),
                                         duration = SnackbarDuration.Short

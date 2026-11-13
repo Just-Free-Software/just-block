@@ -14,6 +14,17 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
+private const val TAG = "BlocklistRepository"
+
+/** Longest valid DNS name, in characters. */
+private const val MAX_DOMAIN_LENGTH = 253
+private const val HTTP_NOT_FOUND = 404
+private const val HTTP_GONE = 410
+private const val READ_CHUNK_BYTES = 8192
+
+/** Initial capacity for the merged sets; a typical single blocklist is this size. */
+private const val EXPECTED_DOMAINS = 250_000
+
 sealed interface BlocklistState {
     object Idle : BlocklistState
     object Loading : BlocklistState
@@ -116,7 +127,7 @@ class FilterParser {
     }
 
     private fun isValid(domain: String): Boolean {
-        if (domain.isEmpty() || domain.length > 253) return false
+        if (domain.isEmpty() || domain.length > MAX_DOMAIN_LENGTH) return false
         if (domain == "localhost" || domain == "127.0.0.1" || domain == "0.0.0.0") return false
         return HOSTNAME_REGEX.matches(domain)
     }
@@ -171,8 +182,10 @@ class BlocklistFetcher(
                 readResponse(response)
             }
         } catch (e: java.net.UnknownHostException) {
+            Log.w("BlocklistFetcher", "Host not found for $url", e)
             FetchResult.Failed(SourceProblem.SITE_NOT_FOUND)
         } catch (e: java.io.IOException) {
+            Log.w("BlocklistFetcher", "Download failed for $url", e)
             FetchResult.Failed(SourceProblem.DOWNLOAD_FAILED)
         }
     }
@@ -180,7 +193,7 @@ class BlocklistFetcher(
     internal fun readResponse(response: okhttp3.Response): FetchResult {
         if (!response.isSuccessful) {
             return FetchResult.Failed(
-                if (response.code == 404 || response.code == 410) {
+                if (response.code == HTTP_NOT_FOUND || response.code == HTTP_GONE) {
                     SourceProblem.PAGE_NOT_FOUND
                 } else {
                     SourceProblem.SERVER_ERROR
@@ -212,7 +225,7 @@ class BlocklistFetcher(
      */
     internal fun parseCapped(input: java.io.InputStream): Set<String>? {
         val result = HashSet<String>()
-        val chunk = ByteArray(8192)
+        val chunk = ByteArray(READ_CHUNK_BYTES)
         val line = ByteArray(maxLineLength)
         var lineLength = 0
         var overlong = false
@@ -304,8 +317,6 @@ class BlocklistRepository(
     private val userPreferences: UserPreferences,
     private val fetcher: BlocklistFetcher
 ) {
-    private val TAG = "BlocklistRepository"
-
     private val sourceCache = SourceCache(java.io.File(context.cacheDir, "blocklists"))
 
     // Single merged cache written by older versions. Only read to arm the
@@ -345,7 +356,7 @@ class BlocklistRepository(
             val customUrls = userPreferences.getCustomSourceUrls()
 
             // 1. Instant Arming: Load cached remote lists and manual rules immediately
-            val initialSet = HashSet<String>(250_000)
+            val initialSet = HashSet<String>(EXPECTED_DOMAINS)
             for (url in customUrls) {
                 val saved = readSaved(url) ?: continue
                 if (initialSet.size + saved.size <=
@@ -369,7 +380,7 @@ class BlocklistRepository(
             Log.i(TAG, "Instantly armed ${initialSet.size} domains from cache/manual rules")
 
             // 2. Network Load: Fetch latest remote blocklists in the background
-            val remoteCompiled = HashSet<String>(250_000)
+            val remoteCompiled = HashSet<String>(EXPECTED_DOMAINS)
             val issues = HashMap<String, SourceIssue>()
             val toSave = ArrayList<Pair<String, Set<String>>>()
 
@@ -379,8 +390,9 @@ class BlocklistRepository(
                         async {
                             url to try {
                                 fetcher.fetch(url)
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
                             } catch (e: Exception) {
-                                if (e is kotlinx.coroutines.CancellationException) throw e
                                 Log.e(TAG, "Failed to fetch source: $url", e)
                                 FetchResult.Failed(SourceProblem.DOWNLOAD_FAILED)
                             }

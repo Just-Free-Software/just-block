@@ -67,6 +67,24 @@ class MyVpnService : VpnService() {
          */
         private const val PROXY_EXIT_TIMEOUT_MS = 2_000L
 
+        /** Extra wait before restarting when the old proxy missed that timeout. */
+        private const val PROXY_EXIT_GRACE_MS = 1_000L
+
+        /** Coalesces bursts of rule changes into one TUN rebuild. */
+        private const val REBUILD_DEBOUNCE_MS = 200L
+
+        private const val BLOCKLIST_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000L
+
+        // The TUN carries only DNS: one host address and one host route per
+        // family, pointing at the fake DNS servers.
+        private const val TUN_ADDRESS_V4 = "10.0.0.2"
+        private const val TUN_DNS_V4 = "10.0.0.1"
+        private const val TUN_ADDRESS_V6 = "fd00:1::2"
+        private const val TUN_DNS_V6 = "fd00:1::1"
+        private const val HOST_PREFIX_V4 = 32
+        private const val HOST_PREFIX_V6 = 128
+        private const val TUN_MTU = 1500
+
         /**
          * Backup upstreams used when the primary (AdGuard DoQ) fails.
          * Cloudflare and Google don't offer DoQ, so these are DoH3
@@ -271,7 +289,7 @@ class MyVpnService : VpnService() {
         dailyRefreshJob?.cancel()
         dailyRefreshJob = serviceScope.launch {
             while (true) {
-                kotlinx.coroutines.delay(24 * 60 * 60 * 1000L)
+                kotlinx.coroutines.delay(BLOCKLIST_REFRESH_INTERVAL_MS)
                 if (vpnInterface == null) break
                 Log.i(TAG, "Daily blocklist refresh…")
                 blocklistRepository.loadAndCompileBlocklists()
@@ -438,7 +456,7 @@ class MyVpnService : VpnService() {
     private fun debounceRebuild() {
         rebuildJob?.cancel()
         rebuildJob = serviceScope.launch {
-            kotlinx.coroutines.delay(200)
+            kotlinx.coroutines.delay(REBUILD_DEBOUNCE_MS)
             rebuildTunInterface()
         }
     }
@@ -520,7 +538,7 @@ class MyVpnService : VpnService() {
                 // 2. It didn't exit in time. Give it a little longer; the new
                 //    proxy also retries its registration for a few seconds.
                 Log.w(TAG, "Old proxy still exiting — delaying the restart")
-                kotlinx.coroutines.delay(1000)
+                kotlinx.coroutines.delay(PROXY_EXIT_GRACE_MS)
             }
 
             // 3. Update underlying network so the VPN inherits the new network's
@@ -547,14 +565,15 @@ class MyVpnService : VpnService() {
         val builder = Builder()
             .setSession("JustBlockVPN")
             // IPv4 Setup
-            .addAddress("10.0.0.2", 32)
-            .addDnsServer("10.0.0.1")
-            .addRoute("10.0.0.1", 32) // Route DNS traffic through TUN to our packet router
+            .addAddress(TUN_ADDRESS_V4, HOST_PREFIX_V4)
+            .addDnsServer(TUN_DNS_V4)
+            // Route DNS traffic through TUN to our packet router
+            .addRoute(TUN_DNS_V4, HOST_PREFIX_V4)
             // IPv6 Setup
-            .addAddress("fd00:1::2", 128)
-            .addDnsServer("fd00:1::1")
-            .addRoute("fd00:1::1", 128)
-            .setMtu(1500)
+            .addAddress(TUN_ADDRESS_V6, HOST_PREFIX_V6)
+            .addDnsServer(TUN_DNS_V6)
+            .addRoute(TUN_DNS_V6, HOST_PREFIX_V6)
+            .setMtu(TUN_MTU)
 
         // Set underlying network explicitly to inherit NET_CAPABILITY_INTERNET immediately
         if (activePhysicalNetwork != null) {
@@ -583,7 +602,7 @@ class MyVpnService : VpnService() {
                 builder.addDisallowedApplication(pkg)
                 Log.d(TAG, "Excluded app from VPN: $pkg")
             } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-                Log.w(TAG, "Skipping unknown package: $pkg")
+                Log.w(TAG, "Skipping unknown package: $pkg", e)
             }
         }
 

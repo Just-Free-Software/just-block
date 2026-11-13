@@ -231,7 +231,11 @@ private fun BlockedDomainRow(
                     }
                 ) {
                     Icon(
-                        imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                        imageVector = if (isPaused) {
+                            Icons.Default.PlayArrow
+                        } else {
+                            Icons.Default.Pause
+                        },
                         contentDescription = stringResource(
                             if (isPaused) R.string.resume else R.string.pause
                         ),

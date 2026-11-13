@@ -88,7 +88,11 @@ fun BlocklistsTab(viewModel: VpnViewModel, modifier: Modifier = Modifier) {
 
 @Composable
 private fun SourceIssue.message(): String = stringResource(
-    if (usingSavedCopy) R.string.source_issue_using_saved_copy else R.string.source_issue_not_loaded,
+    if (usingSavedCopy) {
+        R.string.source_issue_using_saved_copy
+    } else {
+        R.string.source_issue_not_loaded
+    },
     problem.reason()
 )
 

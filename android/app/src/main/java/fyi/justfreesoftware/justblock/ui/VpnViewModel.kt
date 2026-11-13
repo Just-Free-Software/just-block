@@ -157,13 +157,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     val themeMode: StateFlow<ThemeMode> = prefs.themeModeFlow
-        .map {
-            try {
-                ThemeMode.valueOf(it)
-            } catch (e: IllegalArgumentException) {
-                ThemeMode.Dark
-            }
-        }
+        .map { saved -> ThemeMode.entries.firstOrNull { it.name == saved } ?: ThemeMode.Dark }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
