@@ -18,9 +18,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -35,7 +35,7 @@ import kotlinx.coroutines.launch
  */
 class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val prefs      = UserPreferences(application)
+    private val prefs = UserPreferences(application)
     private val repository get() = ServiceLocator.blocklistRepository
 
     /** Active auto-resume coroutines, keyed by domain. */
@@ -83,9 +83,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
      */
     val isVpnEnabled: StateFlow<Boolean> = prefs.isVpnEnabledFlow
         .stateIn(
-            scope         = viewModelScope,
-            started       = SharingStarted.WhileSubscribed(5_000),
-            initialValue  = false,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = false
         )
 
     // ── Blocking enabled toggle ───────────────────────────────────────────────────
@@ -123,9 +123,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
      */
     val isBlockingEnabled: StateFlow<Boolean> = prefs.isBlockingEnabledFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = true,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = true
         )
 
     fun setBlockingEnabled(enabled: Boolean) {
@@ -147,9 +147,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     val isStartOnBoot: StateFlow<Boolean> = prefs.isStartOnBootFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = false,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = false
         )
 
     fun setStartOnBoot(enabled: Boolean) {
@@ -157,17 +157,11 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     val themeMode: StateFlow<ThemeMode> = prefs.themeModeFlow
-        .map { 
-            try {
-                ThemeMode.valueOf(it)
-            } catch (e: IllegalArgumentException) {
-                ThemeMode.Dark
-            }
-        }
+        .map { saved -> ThemeMode.entries.firstOrNull { it.name == saved } ?: ThemeMode.Dark }
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = ThemeMode.Dark,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = ThemeMode.Dark
         )
 
     fun setThemeMode(mode: ThemeMode) {
@@ -176,9 +170,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     val hasSeenWelcome: StateFlow<Boolean?> = prefs.hasSeenWelcomeFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = null,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = null
         )
 
     fun setHasSeenWelcome(seen: Boolean) {
@@ -191,9 +185,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     val manualBlockedDomains: StateFlow<Set<String>> = prefs.manualBlockedDomainsFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = emptySet(),
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptySet()
         )
 
     /**
@@ -258,10 +252,11 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     fun pauseBlockedDomain(domain: String, durationMs: Long?) {
         val cleaned = domain.trim().lowercase()
         if (cleaned.contains("|")) return
-        val expiresAt = if (durationMs != null)
+        val expiresAt = if (durationMs != null) {
             System.currentTimeMillis() + durationMs
-        else
+        } else {
             Long.MAX_VALUE
+        }
 
         // Update live filter
         ServiceLocator.dnsFilter.pauseDomain(cleaned, expiresAt)
@@ -317,9 +312,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     val whitelistedDomains: StateFlow<Set<String>> = prefs.whitelistedDomainsFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = emptySet(),
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptySet()
         )
 
     fun addWhitelistedDomain(domain: String) {
@@ -368,9 +363,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
      */
     val bypassedApps: StateFlow<Set<String>> = prefs.bypassedAppsFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = UserPreferences.DEFAULT_BYPASSED_APPS,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = UserPreferences.DEFAULT_BYPASSED_APPS
         )
 
     /**
@@ -419,9 +414,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     val customSourceUrls: StateFlow<Set<String>> = prefs.customSourceUrlsFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = emptySet(),
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptySet()
         )
 
     fun addCustomSourceUrl(url: String) {
@@ -455,12 +450,10 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     /** Sources that failed in the last refresh, keyed by URL. */
     val sourceIssues: StateFlow<Map<String, SourceIssue>> = repository.sourceIssues
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = emptyMap(),
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyMap()
         )
-
-
 
     // -------------------------------------------------------------------------
     // Blocklist refresh
@@ -479,9 +472,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
      */
     val blocklistState: StateFlow<BlocklistState> = repository.state
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = BlocklistState.Idle,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = BlocklistState.Idle
         )
 
     /**

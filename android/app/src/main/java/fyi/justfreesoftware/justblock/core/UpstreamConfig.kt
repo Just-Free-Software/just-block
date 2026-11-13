@@ -8,11 +8,16 @@ package fyi.justfreesoftware.justblock.core
  * @param sniHostname TLS SNI hostname used for DoQ (e.g. "dns.adguard-dns.com").
  */
 data class UpstreamConfig(
-    val host        : String = "94.140.14.14",
-    val sniHostname : String = "dns.adguard-dns.com",
+    val host: String = "94.140.14.14",
+    val sniHostname: String = "dns.adguard-dns.com"
 ) {
     companion object {
         private const val SEPARATOR = "\t"
+        private const val FIELD_COUNT = 2
+
+        // Older versions also stored a DoQ port and a DoH URL.
+        private const val LEGACY_FIELD_COUNT = 4
+        private const val LEGACY_SNI_INDEX = 2
 
         /**
          * Encodes this config to a single string for DataStore persistence.
@@ -21,7 +26,7 @@ data class UpstreamConfig(
          */
         fun encode(config: UpstreamConfig): String = listOf(
             config.host,
-            config.sniHostname,
+            config.sniHostname
         ).joinToString(SEPARATOR)
 
         /**
@@ -36,8 +41,8 @@ data class UpstreamConfig(
         fun decode(encoded: String): UpstreamConfig? {
             val parts = encoded.split(SEPARATOR)
             val sniHostname = when (parts.size) {
-                2 -> parts[1]
-                4 -> parts[2]
+                FIELD_COUNT -> parts[1]
+                LEGACY_FIELD_COUNT -> parts[LEGACY_SNI_INDEX]
                 else -> return null
             }
             val host = parts[0].ifEmpty { return null }

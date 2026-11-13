@@ -1,6 +1,5 @@
 package fyi.justfreesoftware.justblock.data
 
-import fyi.justfreesoftware.justblock.core.UpstreamConfig
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -10,11 +9,12 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import fyi.justfreesoftware.justblock.core.UpstreamConfig
+import java.io.IOException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import java.io.IOException
 
 // Singleton DataStore instance scoped to the application context
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "vpn_settings")
@@ -22,23 +22,23 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class UserPreferences(private val context: Context) {
 
     private object Keys {
-        val IS_VPN_ENABLED         = booleanPreferencesKey("is_vpn_enabled")
-        val MANUAL_BLOCKED         = stringSetPreferencesKey("manual_blocked_domains")
-        val WHITELISTED            = stringSetPreferencesKey("whitelisted_domains")
-        val CUSTOM_SOURCE_URLS     = stringSetPreferencesKey("custom_source_urls")
-        val THEME_MODE             = stringPreferencesKey("theme_mode")
+        val IS_VPN_ENABLED = booleanPreferencesKey("is_vpn_enabled")
+        val MANUAL_BLOCKED = stringSetPreferencesKey("manual_blocked_domains")
+        val WHITELISTED = stringSetPreferencesKey("whitelisted_domains")
+        val CUSTOM_SOURCE_URLS = stringSetPreferencesKey("custom_source_urls")
+        val THEME_MODE = stringPreferencesKey("theme_mode")
 
         /**
          * Stores the active upstream as a single encoded string.
          * Encoding format is defined in [UpstreamConfig.encode] / [UpstreamConfig.decode].
          * Example value: "94.140.14.14\tdns.adguard-dns.com"
          */
-        val UPSTREAM_CONFIG        = stringPreferencesKey("upstream_config")
-        val IS_BLOCKING_ENABLED    = booleanPreferencesKey("is_blocking_enabled")
-        val IS_START_ON_BOOT       = booleanPreferencesKey("is_start_on_boot")
-        val BYPASSED_APPS          = stringSetPreferencesKey("bypassed_app_packages")
-        val PAUSED_DOMAINS         = stringSetPreferencesKey("paused_domains")
-        val HAS_SEEN_WELCOME       = booleanPreferencesKey("has_seen_welcome")
+        val UPSTREAM_CONFIG = stringPreferencesKey("upstream_config")
+        val IS_BLOCKING_ENABLED = booleanPreferencesKey("is_blocking_enabled")
+        val IS_START_ON_BOOT = booleanPreferencesKey("is_start_on_boot")
+        val BYPASSED_APPS = stringSetPreferencesKey("bypassed_app_packages")
+        val PAUSED_DOMAINS = stringSetPreferencesKey("paused_domains")
+        val HAS_SEEN_WELCOME = booleanPreferencesKey("has_seen_welcome")
     }
 
     companion object {
@@ -54,7 +54,6 @@ class UserPreferences(private val context: Context) {
         )
     }
 
-
     private fun <T> Flow<T>.catchIo(default: T): Flow<T> =
         catch { e -> if (e is IOException) emit(default) else throw e }
 
@@ -66,7 +65,6 @@ class UserPreferences(private val context: Context) {
         context.dataStore.edit { it[Keys.IS_VPN_ENABLED] = enabled }
     }
 
-
     val upstreamConfigFlow: Flow<UpstreamConfig> = context.dataStore.data
         .catchIo(emptyPreferences())
         .map { preferences ->
@@ -75,8 +73,7 @@ class UserPreferences(private val context: Context) {
                 ?: DEFAULT_UPSTREAM
         }
 
-    suspend fun getUpstreamConfig(): UpstreamConfig =
-        upstreamConfigFlow.first()
+    suspend fun getUpstreamConfig(): UpstreamConfig = upstreamConfigFlow.first()
 
     /**
      * Persists [config] to DataStore.
@@ -91,8 +88,7 @@ class UserPreferences(private val context: Context) {
         .catchIo(emptyPreferences())
         .map { it[Keys.MANUAL_BLOCKED] ?: emptySet() }
 
-    suspend fun getManualBlockedDomains(): Set<String> =
-        manualBlockedDomainsFlow.first()
+    suspend fun getManualBlockedDomains(): Set<String> = manualBlockedDomainsFlow.first()
 
     suspend fun addManualBlockedDomain(domain: String) {
         context.dataStore.edit { prefs ->
@@ -112,8 +108,7 @@ class UserPreferences(private val context: Context) {
         .catchIo(emptyPreferences())
         .map { it[Keys.WHITELISTED] ?: emptySet() }
 
-    suspend fun getWhitelistedDomains(): Set<String> =
-        whitelistedDomainsFlow.first()
+    suspend fun getWhitelistedDomains(): Set<String> = whitelistedDomainsFlow.first()
 
     suspend fun addWhitelistedDomain(domain: String) {
         context.dataStore.edit { prefs ->
@@ -133,8 +128,7 @@ class UserPreferences(private val context: Context) {
         .catchIo(emptyPreferences())
         .map { it[Keys.CUSTOM_SOURCE_URLS] ?: emptySet() }
 
-    suspend fun getCustomSourceUrls(): Set<String> =
-        customSourceUrlsFlow.first()
+    suspend fun getCustomSourceUrls(): Set<String> = customSourceUrlsFlow.first()
 
     suspend fun addCustomSourceUrl(url: String) {
         context.dataStore.edit { prefs ->
@@ -150,11 +144,9 @@ class UserPreferences(private val context: Context) {
         }
     }
 
-
-
     val isBlockingEnabledFlow: Flow<Boolean> = context.dataStore.data
         .catchIo(emptyPreferences())
-        .map { it[Keys.IS_BLOCKING_ENABLED] ?: true }  // default: blocking on
+        .map { it[Keys.IS_BLOCKING_ENABLED] ?: true } // default: blocking on
 
     suspend fun setBlockingEnabled(enabled: Boolean) {
         context.dataStore.edit { it[Keys.IS_BLOCKING_ENABLED] = enabled }
@@ -162,7 +154,7 @@ class UserPreferences(private val context: Context) {
 
     val isStartOnBootFlow: Flow<Boolean> = context.dataStore.data
         .catchIo(emptyPreferences())
-        .map { it[Keys.IS_START_ON_BOOT] ?: false }  // default: don't autostart
+        .map { it[Keys.IS_START_ON_BOOT] ?: false } // default: don't autostart
 
     suspend fun setStartOnBoot(enabled: Boolean) {
         context.dataStore.edit { it[Keys.IS_START_ON_BOOT] = enabled }
@@ -195,8 +187,7 @@ class UserPreferences(private val context: Context) {
         .catchIo(emptyPreferences())
         .map { it[Keys.BYPASSED_APPS] ?: DEFAULT_BYPASSED_APPS }
 
-    suspend fun getBypassedApps(): Set<String> =
-        bypassedAppsFlow.first()
+    suspend fun getBypassedApps(): Set<String> = bypassedAppsFlow.first()
 
     suspend fun addBypassedApp(packageName: String) {
         context.dataStore.edit { prefs ->
@@ -231,8 +222,7 @@ class UserPreferences(private val context: Context) {
             decodePausedSet(prefs[Keys.PAUSED_DOMAINS] ?: emptySet())
         }
 
-    suspend fun getPausedDomains(): Map<String, Long> =
-        pausedDomainsFlow.first()
+    suspend fun getPausedDomains(): Map<String, Long> = pausedDomainsFlow.first()
 
     suspend fun addPausedDomain(domain: String, expiresAt: Long) {
         context.dataStore.edit { prefs ->

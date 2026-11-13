@@ -1,6 +1,5 @@
 package fyi.justfreesoftware.justblock.core
 
-import fyi.justfreesoftware.justblock.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,13 +13,13 @@ import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import uniffi.just_block_rust.DnsProxy
-import uniffi.just_block_rust.Doh3Backup
 import fyi.justfreesoftware.justblock.MainActivity
+import fyi.justfreesoftware.justblock.R
 import fyi.justfreesoftware.justblock.ServiceLocator
 import fyi.justfreesoftware.justblock.data.BlocklistRepository
 import fyi.justfreesoftware.justblock.data.BlocklistState
 import fyi.justfreesoftware.justblock.data.UserPreferences
+import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,7 +29,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.io.IOException
+import uniffi.just_block_rust.DnsProxy
+import uniffi.just_block_rust.Doh3Backup
 
 /**
  * Android VpnService that creates a local TUN interface and routes all DNS traffic
@@ -43,7 +43,7 @@ import java.io.IOException
  *      blocklist trie, and forwards allowed queries upstream via DoQ.
  *   3. Instantly arm the blocklist from the local cache via [BlocklistRepository]
  *      so that blocking starts immediately.
- *   4. Download and compile the latest blocklist in the background. Once complete, 
+ *   4. Download and compile the latest blocklist in the background. Once complete,
  *      [DnsFilter] is updated and the new blocklist is pushed to the Rust proxy.
  *
  */
@@ -52,13 +52,13 @@ class MyVpnService : VpnService() {
     companion object {
         private const val TAG = "MyVpnService"
 
-        const val ACTION_START         = "fyi.justfreesoftware.justblock.START"
-        const val ACTION_STOP          = "fyi.justfreesoftware.justblock.STOP"
-        const val ACTION_SET_BLOCKING  = "fyi.justfreesoftware.justblock.SET_BLOCKING"
+        const val ACTION_START = "fyi.justfreesoftware.justblock.START"
+        const val ACTION_STOP = "fyi.justfreesoftware.justblock.STOP"
+        const val ACTION_SET_BLOCKING = "fyi.justfreesoftware.justblock.SET_BLOCKING"
         const val ACTION_FLUSH_DNS_CACHE = "fyi.justfreesoftware.justblock.FLUSH_DNS_CACHE"
         const val EXTRA_BLOCKING_ENABLED = "blocking_enabled"
 
-        private const val NOTIFICATION_ID      = 1
+        private const val NOTIFICATION_ID = 1
         private const val NOTIFICATION_CHANNEL = "justblock_vpn"
 
         /**
@@ -67,6 +67,24 @@ class MyVpnService : VpnService() {
          */
         private const val PROXY_EXIT_TIMEOUT_MS = 2_000L
 
+        /** Extra wait before restarting when the old proxy missed that timeout. */
+        private const val PROXY_EXIT_GRACE_MS = 1_000L
+
+        /** Coalesces bursts of rule changes into one TUN rebuild. */
+        private const val REBUILD_DEBOUNCE_MS = 200L
+
+        private const val BLOCKLIST_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000L
+
+        // The TUN carries only DNS: one host address and one host route per
+        // family, pointing at the fake DNS servers.
+        private const val TUN_ADDRESS_V4 = "10.0.0.2"
+        private const val TUN_DNS_V4 = "10.0.0.1"
+        private const val TUN_ADDRESS_V6 = "fd00:1::2"
+        private const val TUN_DNS_V6 = "fd00:1::1"
+        private const val HOST_PREFIX_V4 = 32
+        private const val HOST_PREFIX_V6 = 128
+        private const val TUN_MTU = 1500
+
         /**
          * Backup upstreams used when the primary (AdGuard DoQ) fails.
          * Cloudflare and Google don't offer DoQ, so these are DoH3
@@ -74,7 +92,7 @@ class MyVpnService : VpnService() {
          */
         private val DOH3_BACKUPS = listOf(
             Doh3Backup("1.1.1.1", "2606:4700:4700::1111", "cloudflare-dns.com", "/dns-query"),
-            Doh3Backup("8.8.8.8", "2001:4860:4860::8888", "dns.google", "/dns-query"),
+            Doh3Backup("8.8.8.8", "2001:4860:4860::8888", "dns.google", "/dns-query")
         )
     }
 
@@ -83,6 +101,7 @@ class MyVpnService : VpnService() {
     private val dnsFilter get() = ServiceLocator.dnsFilter
 
     private var dnsProxy: DnsProxy? = null
+
     @Volatile
     private var isBlockingEnabled = true
 
@@ -105,7 +124,7 @@ class MyVpnService : VpnService() {
             // A null intent is a START_STICKY restart after process death;
             // SERVICE_INTERFACE is how the system starts an always-on VPN.
             ACTION_START, SERVICE_INTERFACE, null -> startVpn()
-            ACTION_STOP         -> {
+            ACTION_STOP -> {
                 serviceScope.launch { userPreferences.setVpnEnabled(false) }
                 stopVpn()
             }
@@ -244,7 +263,7 @@ class MyVpnService : VpnService() {
                 when (val state = blocklistRepository.state.value) {
                     is BlocklistState.Success ->
                         Log.i(TAG, "Blocklist ready — ${state.totalDomains} domains loaded")
-                    is BlocklistState.Error   ->
+                    is BlocklistState.Error ->
                         Log.e(TAG, "Blocklist failed to load: ${state.message}")
                     else -> Unit
                 }
@@ -270,7 +289,7 @@ class MyVpnService : VpnService() {
         dailyRefreshJob?.cancel()
         dailyRefreshJob = serviceScope.launch {
             while (true) {
-                kotlinx.coroutines.delay(24 * 60 * 60 * 1000L)
+                kotlinx.coroutines.delay(BLOCKLIST_REFRESH_INTERVAL_MS)
                 if (vpnInterface == null) break
                 Log.i(TAG, "Daily blocklist refresh…")
                 blocklistRepository.loadAndCompileBlocklists()
@@ -437,7 +456,7 @@ class MyVpnService : VpnService() {
     private fun debounceRebuild() {
         rebuildJob?.cancel()
         rebuildJob = serviceScope.launch {
-            kotlinx.coroutines.delay(200)
+            kotlinx.coroutines.delay(REBUILD_DEBOUNCE_MS)
             rebuildTunInterface()
         }
     }
@@ -519,7 +538,7 @@ class MyVpnService : VpnService() {
                 // 2. It didn't exit in time. Give it a little longer; the new
                 //    proxy also retries its registration for a few seconds.
                 Log.w(TAG, "Old proxy still exiting — delaying the restart")
-                kotlinx.coroutines.delay(1000)
+                kotlinx.coroutines.delay(PROXY_EXIT_GRACE_MS)
             }
 
             // 3. Update underlying network so the VPN inherits the new network's
@@ -546,16 +565,15 @@ class MyVpnService : VpnService() {
         val builder = Builder()
             .setSession("JustBlockVPN")
             // IPv4 Setup
-            .addAddress("10.0.0.2", 32)
-            .addDnsServer("10.0.0.1")
-            .addRoute("10.0.0.1", 32)  // Route DNS traffic through TUN to our packet router
-
+            .addAddress(TUN_ADDRESS_V4, HOST_PREFIX_V4)
+            .addDnsServer(TUN_DNS_V4)
+            // Route DNS traffic through TUN to our packet router
+            .addRoute(TUN_DNS_V4, HOST_PREFIX_V4)
             // IPv6 Setup
-            .addAddress("fd00:1::2", 128)
-            .addDnsServer("fd00:1::1")
-            .addRoute("fd00:1::1", 128)
-
-            .setMtu(1500)
+            .addAddress(TUN_ADDRESS_V6, HOST_PREFIX_V6)
+            .addDnsServer(TUN_DNS_V6)
+            .addRoute(TUN_DNS_V6, HOST_PREFIX_V6)
+            .setMtu(TUN_MTU)
 
         // Set underlying network explicitly to inherit NET_CAPABILITY_INTERNET immediately
         if (activePhysicalNetwork != null) {
@@ -572,7 +590,7 @@ class MyVpnService : VpnService() {
 
         // Exclude bypassed apps from the VPN tunnel
         val bypassedApps = userPreferences.getBypassedApps().toMutableSet()
-        
+
         // Critical system packages that must bypass the VPN to maintain connectivity signalling
         val systemBypasses = listOf(
             packageName // Just Block itself
@@ -584,7 +602,7 @@ class MyVpnService : VpnService() {
                 builder.addDisallowedApplication(pkg)
                 Log.d(TAG, "Excluded app from VPN: $pkg")
             } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-                Log.w(TAG, "Skipping unknown package: $pkg")
+                Log.w(TAG, "Skipping unknown package: $pkg", e)
             }
         }
 
@@ -650,7 +668,7 @@ class MyVpnService : VpnService() {
         connectivityManager?.registerBestMatchingNetworkCallback(
             request,
             networkCallback,
-            android.os.Handler(android.os.Looper.getMainLooper()),
+            android.os.Handler(android.os.Looper.getMainLooper())
         )
         Log.d(TAG, "Network callback registered (tracking best physical network)")
     }
@@ -664,7 +682,7 @@ class MyVpnService : VpnService() {
         val channel = NotificationChannel(
             NOTIFICATION_CHANNEL,
             getString(R.string.notification_channel_name),
-            NotificationManager.IMPORTANCE_LOW,
+            NotificationManager.IMPORTANCE_LOW
         ).apply {
             description = getString(R.string.notification_channel_description)
             setShowBadge(false)
@@ -674,17 +692,19 @@ class MyVpnService : VpnService() {
             ?.createNotificationChannel(channel)
 
         val openAppIntent = PendingIntent.getActivity(
-            this, 0,
+            this,
+            0,
             Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE,
+            PendingIntent.FLAG_IMMUTABLE
         )
 
         val stopIntent = PendingIntent.getActivity(
-            this, 1,
+            this,
+            1,
             Intent(this, MainActivity::class.java).apply {
                 action = MainActivity.ACTION_STOP_AND_CLOSE
             },
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL)
@@ -694,7 +714,11 @@ class MyVpnService : VpnService() {
             .setContentIntent(openAppIntent)
             .setOngoing(true)
             .setNumber(0)
-            .addAction(android.R.drawable.ic_delete, getString(R.string.notification_stop), stopIntent)
+            .addAction(
+                android.R.drawable.ic_delete,
+                getString(R.string.notification_stop),
+                stopIntent
+            )
             .build()
     }
 }

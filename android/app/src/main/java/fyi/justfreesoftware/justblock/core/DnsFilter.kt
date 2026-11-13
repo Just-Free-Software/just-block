@@ -3,15 +3,15 @@ package fyi.justfreesoftware.justblock.core
 import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 
+private const val TAG = "DnsFilter"
+
 /**
  * Manages the live state of the blocklist, including user-added rules and temporary pauses.
- * 
- * This class holds the active rules in memory and pushes any changes over to the Rust-based 
+ *
+ * This class holds the active rules in memory and pushes any changes over to the Rust-based
  * DnsProxy via the [rustProxyCallback], which handles the actual DNS packet filtering.
  */
 class DnsFilter {
-    private val TAG = "DnsFilter"
-
     @Volatile
     private var blocklist: Set<String> = emptySet()
 
@@ -136,7 +136,10 @@ class DnsFilter {
         if (cleaned.isNotEmpty()) {
             pausedDomains[cleaned] = expiresAt
             blocklist = blocklist - cleaned
-            Log.d(TAG, "Paused domain: $cleaned until ${if (expiresAt == Long.MAX_VALUE) "indefinitely" else expiresAt}")
+            Log.d(
+                TAG,
+                "Paused domain: $cleaned until ${if (expiresAt == Long.MAX_VALUE) "indefinitely" else expiresAt}"
+            )
             rustProxyCallback?.invoke(blocklist.toList(), pausedDomains.toMap())
         }
     }

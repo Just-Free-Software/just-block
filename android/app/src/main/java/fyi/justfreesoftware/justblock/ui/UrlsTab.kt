@@ -1,7 +1,5 @@
 package fyi.justfreesoftware.justblock.ui
 
-import androidx.compose.ui.res.stringResource
-import fyi.justfreesoftware.justblock.R
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,19 +42,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import fyi.justfreesoftware.justblock.R
 import kotlinx.coroutines.launch
 
 @Composable
 fun UrlsTab(
     viewModel: VpnViewModel,
     snackbarHostState: SnackbarHostState,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     val whitelisted by viewModel.whitelistedDomains.collectAsState()
     val coroutineScope = rememberCoroutineScope()
@@ -66,7 +66,7 @@ fun UrlsTab(
     var isInputFocused by remember { mutableStateOf(false) }
     val inputFocusRequester = remember { FocusRequester() }
     val alreadyWhitelistedMessage = stringResource(R.string.whitelist_already)
-    val invalidUrlMessage         = stringResource(R.string.whitelist_invalid)
+    val invalidUrlMessage = stringResource(R.string.whitelist_invalid)
 
     fun addUrl() {
         if (input.isBlank()) return
@@ -104,33 +104,36 @@ fun UrlsTab(
         // ── Add field ─────────────────────────────────────────────────────
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier          = Modifier
+            modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             OutlinedTextField(
-                value            = input,
-                onValueChange    = { input = it },
-                modifier         = Modifier
+                value = input,
+                onValueChange = { input = it },
+                modifier = Modifier
                     .weight(1f)
                     .focusRequester(inputFocusRequester)
                     .onFocusChanged { isInputFocused = it.isFocused },
-                placeholder      = { Text(stringResource(R.string.example_domain_hint)) },
-                singleLine       = true,
-                shape            = RoundedCornerShape(12.dp),
-                keyboardOptions  = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions  = KeyboardActions(onDone = { addUrl() }),
+                placeholder = { Text(stringResource(R.string.example_domain_hint)) },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { addUrl() })
             )
             Spacer(Modifier.width(8.dp))
             FilledIconButton(
                 onClick = {
-                    if (!isInputFocused) inputFocusRequester.requestFocus()
-                    else addUrl()
-                },
+                    if (!isInputFocused) {
+                        inputFocusRequester.requestFocus()
+                    } else {
+                        addUrl()
+                    }
+                }
             ) {
                 Icon(
-                    imageVector        = Icons.Default.Add,
-                    contentDescription = stringResource(R.string.add),
+                    imageVector = Icons.Default.Add,
+                    contentDescription = stringResource(R.string.add)
                 )
             }
         }
@@ -140,51 +143,51 @@ fun UrlsTab(
         // ── Whitelisted domains ───────────────────────────────────────────
         if (whitelisted.isEmpty()) {
             Column(
-                modifier            = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(
-                    imageVector        = Icons.Default.VerifiedUser,
+                    imageVector = Icons.Default.VerifiedUser,
                     contentDescription = null,
-                    tint              = MaterialTheme.colorScheme.primary,
-                    modifier          = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(64.dp)
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text  = stringResource(R.string.whitelist_empty),
+                    text = stringResource(R.string.whitelist_empty),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(vertical = 4.dp),
+                contentPadding = PaddingValues(vertical = 4.dp)
             ) {
                 items(
                     items = whitelisted.sorted(),
-                    key   = { it },
+                    key = { it }
                 ) { domain ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text     = domain,
-                            style    = MaterialTheme.typography.bodyLarge,
+                            text = domain,
+                            style = MaterialTheme.typography.bodyLarge,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f)
                         )
                         IconButton(
-                            onClick = { viewModel.removeWhitelistedDomain(domain) },
+                            onClick = { viewModel.removeWhitelistedDomain(domain) }
                         ) {
                             Icon(
-                                imageVector        = Icons.Default.Delete,
+                                imageVector = Icons.Default.Delete,
                                 contentDescription = stringResource(R.string.remove),
-                                tint               = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }

@@ -1,8 +1,5 @@
 package fyi.justfreesoftware.justblock.ui
 
-import androidx.compose.ui.res.stringResource
-import fyi.justfreesoftware.justblock.R
-import fyi.justfreesoftware.justblock.ui.theme.HeaderTextStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,14 +31,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import fyi.justfreesoftware.justblock.R
+import fyi.justfreesoftware.justblock.ui.theme.HeaderTextStyle
 
 @Composable
-fun WhitelistScreen(
-    viewModel: VpnViewModel,
-    modifier: Modifier = Modifier,
-) {
+fun WhitelistScreen(viewModel: VpnViewModel, modifier: Modifier = Modifier) {
     // 0 = URLs (default), 1 = Apps
     var selectedTab by remember { mutableStateOf(0) }
     var showInfoDialog by remember { mutableStateOf(false) }
@@ -92,8 +89,8 @@ fun WhitelistScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text  = stringResource(R.string.nav_whitelist),
-                    style = HeaderTextStyle,
+                    text = stringResource(R.string.nav_whitelist),
+                    style = HeaderTextStyle
                 )
                 Spacer(Modifier.weight(1f))
                 IconButton(
@@ -113,35 +110,35 @@ fun WhitelistScreen(
             TabRow(selectedTabIndex = selectedTab) {
                 Tab(
                     selected = selectedTab == 0,
-                    onClick  = { selectedTab = 0 },
+                    onClick = { selectedTab = 0 },
                     text = {
                         Text(
                             stringResource(R.string.tab_website),
                             style = MaterialTheme.typography.labelLarge
                         )
-                    },
+                    }
                 )
                 Tab(
                     selected = selectedTab == 1,
-                    onClick  = { selectedTab = 1 },
+                    onClick = { selectedTab = 1 },
                     text = {
                         Text(
                             stringResource(R.string.tab_apps),
                             style = MaterialTheme.typography.labelLarge
                         )
-                    },
+                    }
                 )
             }
 
             // ── Content ───────────────────────────────────────────────────
             when (selectedTab) {
                 0 -> UrlsTab(
-                    viewModel         = viewModel,
-                    snackbarHostState = snackbarHostState,
+                    viewModel = viewModel,
+                    snackbarHostState = snackbarHostState
                 )
                 1 -> AppsTab(
-                    viewModel         = viewModel,
-                    snackbarHostState = snackbarHostState,
+                    viewModel = viewModel,
+                    snackbarHostState = snackbarHostState
                 )
             }
         }
