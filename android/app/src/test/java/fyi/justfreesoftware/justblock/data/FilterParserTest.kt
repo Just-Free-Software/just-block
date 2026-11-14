@@ -46,9 +46,9 @@ class FilterParserTest {
                 "upper-case.com",
                 "adblock-network.com",
                 "adblock-no-caret.com",
-                "wildcard-prefix.com",
+                "wildcard-prefix.com"
             ),
-            parser.parseAll(sampleList.lineSequence()),
+            parser.parseAll(sampleList.lineSequence())
         )
     }
 

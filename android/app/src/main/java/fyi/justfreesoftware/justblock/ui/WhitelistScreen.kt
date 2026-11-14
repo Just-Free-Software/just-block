@@ -1,6 +1,5 @@
 package fyi.justfreesoftware.justblock.ui
 
-import fyi.justfreesoftware.justblock.ui.theme.HeaderTextStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,14 +31,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import fyi.justfreesoftware.justblock.R
+import fyi.justfreesoftware.justblock.ui.theme.HeaderTextStyle
 
 @Composable
-fun WhitelistScreen(
-    viewModel: VpnViewModel,
-    modifier: Modifier = Modifier,
-) {
+fun WhitelistScreen(viewModel: VpnViewModel, modifier: Modifier = Modifier) {
     // 0 = URLs (default), 1 = Apps
     var selectedTab by remember { mutableStateOf(0) }
     var showInfoDialog by remember { mutableStateOf(false) }
@@ -54,16 +53,12 @@ fun WhitelistScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Whitelist Info",
+                        text = stringResource(R.string.whitelist_info_title),
                         style = MaterialTheme.typography.titleLarge
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = """
-                            Website — Whitelisted domains are never blocked. Whitelisting a site does not whitelist the ads that the site might link to.
-
-                            Apps — Selected apps bypass the VPN entirely and use your normal connection. All other apps will have their traffic routed through the VPN to be filtered.
-                        """.trimIndent(),
+                        text = stringResource(R.string.whitelist_info_body),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -72,7 +67,7 @@ fun WhitelistScreen(
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(onClick = { showInfoDialog = false }) {
-                            Text("OK")
+                            Text(stringResource(R.string.ok))
                         }
                     }
                 }
@@ -94,8 +89,8 @@ fun WhitelistScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text  = "Whitelist",
-                    style = HeaderTextStyle,
+                    text = stringResource(R.string.nav_whitelist),
+                    style = HeaderTextStyle
                 )
                 Spacer(Modifier.weight(1f))
                 IconButton(
@@ -104,7 +99,7 @@ fun WhitelistScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Info,
-                        contentDescription = "Info",
+                        contentDescription = stringResource(R.string.info),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(40.dp)
                     )
@@ -115,35 +110,35 @@ fun WhitelistScreen(
             TabRow(selectedTabIndex = selectedTab) {
                 Tab(
                     selected = selectedTab == 0,
-                    onClick  = { selectedTab = 0 },
+                    onClick = { selectedTab = 0 },
                     text = {
                         Text(
-                            "Website",
+                            stringResource(R.string.tab_website),
                             style = MaterialTheme.typography.labelLarge
                         )
-                    },
+                    }
                 )
                 Tab(
                     selected = selectedTab == 1,
-                    onClick  = { selectedTab = 1 },
+                    onClick = { selectedTab = 1 },
                     text = {
                         Text(
-                            "Apps",
+                            stringResource(R.string.tab_apps),
                             style = MaterialTheme.typography.labelLarge
                         )
-                    },
+                    }
                 )
             }
 
             // ── Content ───────────────────────────────────────────────────
             when (selectedTab) {
                 0 -> UrlsTab(
-                    viewModel         = viewModel,
-                    snackbarHostState = snackbarHostState,
+                    viewModel = viewModel,
+                    snackbarHostState = snackbarHostState
                 )
                 1 -> AppsTab(
-                    viewModel         = viewModel,
-                    snackbarHostState = snackbarHostState,
+                    viewModel = viewModel,
+                    snackbarHostState = snackbarHostState
                 )
             }
         }

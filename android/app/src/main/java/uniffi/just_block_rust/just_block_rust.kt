@@ -675,19 +675,39 @@ internal object IntegrityCheckingUniffiLib {
     }
 
     internal fun ensureInitialized() = Unit
+    external fun uniffi_just_block_rust_checksum_method_blocklistbuilder_add(
+    ): Int
+    external fun uniffi_just_block_rust_checksum_method_blocklistbuilder_add_file(
+    ): Int
+    external fun uniffi_just_block_rust_checksum_method_blocklistbuilder_count(
+    ): Int
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_get_quic_fds(
     ): Int
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_start(
     ): Int
     external fun uniffi_just_block_rust_checksum_method_dnsproxy_stop(
     ): Int
-    external fun uniffi_just_block_rust_checksum_method_dnsproxy_update_allowlist(
+    external fun uniffi_just_block_rust_checksum_method_dnsproxy_stop_and_wait(
     ): Int
-    external fun uniffi_just_block_rust_checksum_method_dnsproxy_update_blocklist(
+    external fun uniffi_just_block_rust_checksum_method_filterrules_add_blocked(
     ): Int
-    external fun uniffi_just_block_rust_checksum_method_dnsproxy_update_pauses(
+    external fun uniffi_just_block_rust_checksum_method_filterrules_clear(
+    ): Int
+    external fun uniffi_just_block_rust_checksum_method_filterrules_remove_blocked(
+    ): Int
+    external fun uniffi_just_block_rust_checksum_method_filterrules_set_allowlist(
+    ): Int
+    external fun uniffi_just_block_rust_checksum_method_filterrules_set_blocking_enabled(
+    ): Int
+    external fun uniffi_just_block_rust_checksum_method_filterrules_set_blocklist(
+    ): Int
+    external fun uniffi_just_block_rust_checksum_method_filterrules_set_pauses(
+    ): Int
+    external fun uniffi_just_block_rust_checksum_constructor_blocklistbuilder_new(
     ): Int
     external fun uniffi_just_block_rust_checksum_constructor_dnsproxy_new(
+    ): Int
+    external fun uniffi_just_block_rust_checksum_constructor_filterrules_new(
     ): Int
     external fun ffi_just_block_rust_uniffi_contract_version(
     ): Int
@@ -709,11 +729,23 @@ internal object UniffiLib {
     }
 
     internal fun ensureInitialized() = Unit
+    external fun uniffi_just_block_rust_fn_clone_blocklistbuilder(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_just_block_rust_fn_free_blocklistbuilder(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_just_block_rust_fn_constructor_blocklistbuilder_new(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_just_block_rust_fn_method_blocklistbuilder_add(`ptr`: Long,`domains`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_just_block_rust_fn_method_blocklistbuilder_add_file(`ptr`: Long,`path`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_just_block_rust_fn_method_blocklistbuilder_count(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
     external fun uniffi_just_block_rust_fn_clone_dnsproxy(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_just_block_rust_fn_free_dnsproxy(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    external fun uniffi_just_block_rust_fn_constructor_dnsproxy_new(`tunFd`: Int,`upstreamV4`: RustBuffer.ByValue,`upstreamV6`: RustBuffer.ByValue,`sniHostname`: RustBuffer.ByValue,`doh3Backups`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_just_block_rust_fn_constructor_dnsproxy_new(`tunFd`: Int,`upstreamV4`: RustBuffer.ByValue,`upstreamV6`: RustBuffer.ByValue,`sniHostname`: RustBuffer.ByValue,`doh3Backups`: RustBuffer.ByValue,`rules`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_just_block_rust_fn_method_dnsproxy_get_quic_fds(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -721,11 +753,27 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_just_block_rust_fn_method_dnsproxy_stop(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    external fun uniffi_just_block_rust_fn_method_dnsproxy_update_allowlist(`ptr`: Long,`domains`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_just_block_rust_fn_method_dnsproxy_stop_and_wait(`ptr`: Long,`timeoutMs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_just_block_rust_fn_clone_filterrules(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_just_block_rust_fn_free_filterrules(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    external fun uniffi_just_block_rust_fn_method_dnsproxy_update_blocklist(`ptr`: Long,`domains`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_just_block_rust_fn_constructor_filterrules_new(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_just_block_rust_fn_method_filterrules_add_blocked(`ptr`: Long,`domain`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    external fun uniffi_just_block_rust_fn_method_dnsproxy_update_pauses(`ptr`: Long,`pauses`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_just_block_rust_fn_method_filterrules_clear(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_just_block_rust_fn_method_filterrules_remove_blocked(`ptr`: Long,`domain`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_just_block_rust_fn_method_filterrules_set_allowlist(`ptr`: Long,`domains`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_just_block_rust_fn_method_filterrules_set_blocking_enabled(`ptr`: Long,`enabled`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_just_block_rust_fn_method_filterrules_set_blocklist(`ptr`: Long,`builder`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_just_block_rust_fn_method_filterrules_set_pauses(`ptr`: Long,`pauses`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun ffi_just_block_rust_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -846,6 +894,15 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
+    if ((lib.uniffi_just_block_rust_checksum_method_blocklistbuilder_add() and 0xFFFF) != 46057) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_just_block_rust_checksum_method_blocklistbuilder_add_file() and 0xFFFF) != 11748) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_just_block_rust_checksum_method_blocklistbuilder_count() and 0xFFFF) != 65368) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_get_quic_fds() and 0xFFFF) != 50249) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -855,16 +912,37 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_stop() and 0xFFFF) != 15748) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_update_allowlist() and 0xFFFF) != 6744) {
+    if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_stop_and_wait() and 0xFFFF) != 64423) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_update_blocklist() and 0xFFFF) != 1097) {
+    if ((lib.uniffi_just_block_rust_checksum_method_filterrules_add_blocked() and 0xFFFF) != 22878) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_just_block_rust_checksum_method_dnsproxy_update_pauses() and 0xFFFF) != 27659) {
+    if ((lib.uniffi_just_block_rust_checksum_method_filterrules_clear() and 0xFFFF) != 63600) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_just_block_rust_checksum_constructor_dnsproxy_new() and 0xFFFF) != 60840) {
+    if ((lib.uniffi_just_block_rust_checksum_method_filterrules_remove_blocked() and 0xFFFF) != 12382) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_just_block_rust_checksum_method_filterrules_set_allowlist() and 0xFFFF) != 32364) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_just_block_rust_checksum_method_filterrules_set_blocking_enabled() and 0xFFFF) != 26244) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_just_block_rust_checksum_method_filterrules_set_blocklist() and 0xFFFF) != 41494) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_just_block_rust_checksum_method_filterrules_set_pauses() and 0xFFFF) != 54389) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_just_block_rust_checksum_constructor_blocklistbuilder_new() and 0xFFFF) != 60416) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_just_block_rust_checksum_constructor_dnsproxy_new() and 0xFFFF) != 33014) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_just_block_rust_checksum_constructor_filterrules_new() and 0xFFFF) != 41216) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -1050,6 +1128,29 @@ public object FfiConverterInt: FfiConverter<Int, Int> {
 /**
  * @suppress
  */
+public object FfiConverterULong: FfiConverter<ULong, Long> {
+    override fun lift(value: Long): ULong {
+        return value.toULong()
+    }
+
+    override fun read(buf: ByteBuffer): ULong {
+        return lift(buf.getLong())
+    }
+
+    override fun lower(value: ULong): Long {
+        return value.toLong()
+    }
+
+    override fun allocationSize(value: ULong) = 8UL
+
+    override fun write(value: ULong, buf: ByteBuffer) {
+        buf.putLong(value.toLong())
+    }
+}
+
+/**
+ * @suppress
+ */
 public object FfiConverterLong: FfiConverter<Long, Long> {
     override fun lift(value: Long): Long {
         return value
@@ -1067,6 +1168,29 @@ public object FfiConverterLong: FfiConverter<Long, Long> {
 
     override fun write(value: Long, buf: ByteBuffer) {
         buf.putLong(value)
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterBoolean: FfiConverter<Boolean, Byte> {
+    override fun lift(value: Byte): Boolean {
+        return value.toInt() != 0
+    }
+
+    override fun read(buf: ByteBuffer): Boolean {
+        return lift(buf.get())
+    }
+
+    override fun lower(value: Boolean): Byte {
+        return if (value) 1.toByte() else 0.toByte()
+    }
+
+    override fun allocationSize(value: Boolean) = 1UL
+
+    override fun write(value: Boolean, buf: ByteBuffer) {
+        buf.put(lower(value))
     }
 }
 
@@ -1223,6 +1347,335 @@ public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
 //
 
 
+/**
+ * Collects a new blocklist a batch at a time, so the Android side can
+ * stream domains across without ever holding the whole list. Hand it to
+ * [FilterRules::set_blocklist] when done.
+ */
+public interface BlocklistBuilderInterface {
+    
+    /**
+     * Adds a batch of domains. Duplicates and invalid names are dropped.
+     */
+    fun `add`(`domains`: List<kotlin.String>)
+    
+    /**
+     * Adds every domain in the file at `path` (one per line, as the
+     * Android side's blocklist cache stores them), unless the file's line
+     * count would take the builder past `limit` domains. Reading the file
+     * here is far cheaper than passing each domain across as a string.
+     */
+    fun `addFile`(`path`: kotlin.String, `limit`: kotlin.ULong): AddFileOutcome
+    
+    /**
+     * Distinct domains collected so far.
+     */
+    fun `count`(): kotlin.ULong
+    
+    companion object
+}
+
+/**
+ * Collects a new blocklist a batch at a time, so the Android side can
+ * stream domains across without ever holding the whole list. Hand it to
+ * [FilterRules::set_blocklist] when done.
+ */
+open class BlocklistBuilder: Disposable, AutoCloseable, BlocklistBuilderInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor() :
+        this(UniffiWithHandle, 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_constructor_blocklistbuilder_new(
+    
+        _status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_just_block_rust_fn_free_blocklistbuilder(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_just_block_rust_fn_clone_blocklistbuilder(handle, status)
+        }
+    }
+
+    
+    /**
+     * Adds a batch of domains. Duplicates and invalid names are dropped.
+     */override fun `add`(`domains`: List<kotlin.String>)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_method_blocklistbuilder_add(
+        it,
+        
+        FfiConverterSequenceString.lower(`domains`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Adds every domain in the file at `path` (one per line, as the
+     * Android side's blocklist cache stores them), unless the file's line
+     * count would take the builder past `limit` domains. Reading the file
+     * here is far cheaper than passing each domain across as a string.
+     */override fun `addFile`(`path`: kotlin.String, `limit`: kotlin.ULong): AddFileOutcome {
+            return FfiConverterTypeAddFileOutcome.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_method_blocklistbuilder_add_file(
+        it,
+        
+        FfiConverterString.lower(`path`),
+        FfiConverterULong.lower(`limit`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Distinct domains collected so far.
+     */override fun `count`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_method_blocklistbuilder_count(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBlocklistBuilder: FfiConverter<BlocklistBuilder, Long> {
+    override fun lower(value: BlocklistBuilder): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): BlocklistBuilder {
+        return BlocklistBuilder(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): BlocklistBuilder {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: BlocklistBuilder) = 8UL
+
+    override fun write(value: BlocklistBuilder, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface DnsProxyInterface {
     
     /**
@@ -1247,21 +1700,16 @@ public interface DnsProxyInterface {
     fun `stop`()
     
     /**
-     * Replaces the allowlist (user-whitelisted domains). An allowlisted
-     * domain — and every subdomain of it — is always forwarded, overriding
-     * both the blocklist and expired pauses.
+     * Like [stop](Self::stop), but blocks until the proxy task has exited
+     * and released the TUN fd, or `timeout_ms` elapses. Returns true when
+     * the task is gone (or none was running) and false on timeout.
+     *
+     * The Android side calls this before starting another proxy on the
+     * same TUN fd, or before closing the TUN, so the old task's reactor
+     * registration can never collide with the next one. Blocking: never
+     * call it from the main thread or from inside the Tokio runtime.
      */
-    fun `updateAllowlist`(`domains`: List<kotlin.String>)
-    
-    fun `updateBlocklist`(`domains`: List<kotlin.String>)
-    
-    /**
-     * Replaces the pause set. `pauses` maps lowercased domains to epoch-millis
-     * expiry times; `i64::MAX` means an indefinite pause. Pauses are enforced
-     * lazily at query time (see [pause_expired]), so they keep working even
-     * when the Android UI process that owns the countdown timer is gone.
-     */
-    fun `updatePauses`(`pauses`: Map<kotlin.String, kotlin.Long>)
+    fun `stopAndWait`(`timeoutMs`: kotlin.ULong): kotlin.Boolean
     
     companion object
 }
@@ -1290,7 +1738,7 @@ open class DnsProxy: Disposable, AutoCloseable, DnsProxyInterface
         this.handle = 0
         this.cleanable = null
     }
-    constructor(`tunFd`: kotlin.Int, `upstreamV4`: kotlin.String?, `upstreamV6`: kotlin.String?, `sniHostname`: kotlin.String, `doh3Backups`: List<Doh3Backup>) :
+    constructor(`tunFd`: kotlin.Int, `upstreamV4`: kotlin.String?, `upstreamV6`: kotlin.String?, `sniHostname`: kotlin.String, `doh3Backups`: List<Doh3Backup>, `rules`: FilterRules) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_just_block_rust_fn_constructor_dnsproxy_new(
@@ -1300,7 +1748,8 @@ open class DnsProxy: Disposable, AutoCloseable, DnsProxyInterface
         FfiConverterOptionalString.lower(`upstreamV4`),
         FfiConverterOptionalString.lower(`upstreamV6`),
         FfiConverterString.lower(`sniHostname`),
-        FfiConverterSequenceTypeDoh3Backup.lower(`doh3Backups`),_status)
+        FfiConverterSequenceTypeDoh3Backup.lower(`doh3Backups`),
+        FfiConverterTypeFilterRules.lower(`rules`),_status)
 }
     )
 
@@ -1434,52 +1883,26 @@ open class DnsProxy: Disposable, AutoCloseable, DnsProxyInterface
 
     
     /**
-     * Replaces the allowlist (user-whitelisted domains). An allowlisted
-     * domain — and every subdomain of it — is always forwarded, overriding
-     * both the blocklist and expired pauses.
-     */override fun `updateAllowlist`(`domains`: List<kotlin.String>)
-        = 
+     * Like [stop](Self::stop), but blocks until the proxy task has exited
+     * and released the TUN fd, or `timeout_ms` elapses. Returns true when
+     * the task is gone (or none was running) and false on timeout.
+     *
+     * The Android side calls this before starting another proxy on the
+     * same TUN fd, or before closing the TUN, so the old task's reactor
+     * registration can never collide with the next one. Blocking: never
+     * call it from the main thread or from inside the Tokio runtime.
+     */override fun `stopAndWait`(`timeoutMs`: kotlin.ULong): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_just_block_rust_fn_method_dnsproxy_update_allowlist(
+    UniffiLib.uniffi_just_block_rust_fn_method_dnsproxy_stop_and_wait(
         it,
         
-        FfiConverterSequenceString.lower(`domains`),_status)
+        FfiConverterULong.lower(`timeoutMs`),_status)
 }
     }
-    
-    
-
-    override fun `updateBlocklist`(`domains`: List<kotlin.String>)
-        = 
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_just_block_rust_fn_method_dnsproxy_update_blocklist(
-        it,
-        
-        FfiConverterSequenceString.lower(`domains`),_status)
-}
+    )
     }
-    
-    
-
-    
-    /**
-     * Replaces the pause set. `pauses` maps lowercased domains to epoch-millis
-     * expiry times; `i64::MAX` means an indefinite pause. Pauses are enforced
-     * lazily at query time (see [pause_expired]), so they keep working even
-     * when the Android UI process that owns the countdown timer is gone.
-     */override fun `updatePauses`(`pauses`: Map<kotlin.String, kotlin.Long>)
-        = 
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_just_block_rust_fn_method_dnsproxy_update_pauses(
-        it,
-        
-        FfiConverterMapStringLong.lower(`pauses`),_status)
-}
-    }
-    
     
 
     
@@ -1516,6 +1939,440 @@ public object FfiConverterTypeDnsProxy: FfiConverter<DnsProxy, Long> {
     override fun allocationSize(value: DnsProxy) = 8UL
 
     override fun write(value: DnsProxy, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+/**
+ * The filtering rules: blocklist, allowlist, pauses and the blocking
+ * switch. One instance lives for the whole app process and is shared by
+ * every [DnsProxy] in turn, so rebuilding the tunnel or reconnecting
+ * upstream never needs the lists pushed again. It holds the only copy of
+ * the blocklist; the Android side keeps none.
+ *
+ * Changes take effect on the next query. See [rules] for the matching
+ * rules.
+ */
+public interface FilterRulesInterface {
+    
+    /**
+     * Adds one domain to the blocklist.
+     */
+    fun `addBlocked`(`domain`: kotlin.String)
+    
+    /**
+     * Empties the blocklist, allowlist and pauses, freeing their memory.
+     */
+    fun `clear`()
+    
+    /**
+     * Removes one entry from the blocklist. Only that exact entry goes:
+     * the domain stays blocked if a parent domain is listed.
+     */
+    fun `removeBlocked`(`domain`: kotlin.String)
+    
+    /**
+     * Replaces the allowlist (user-whitelisted domains). An allowlisted
+     * domain, and every subdomain of it, is always forwarded, overriding
+     * both the blocklist and expired pauses.
+     */
+    fun `setAllowlist`(`domains`: List<kotlin.String>)
+    
+    /**
+     * With blocking disabled nothing is blocked and every query is
+     * forwarded. The lists are kept.
+     */
+    fun `setBlockingEnabled`(`enabled`: kotlin.Boolean)
+    
+    /**
+     * Replaces the blocklist with what `builder` has collected. The
+     * builder is left empty.
+     */
+    fun `setBlocklist`(`builder`: BlocklistBuilder)
+    
+    /**
+     * Replaces the pause set. `pauses` maps domains to epoch-millis expiry
+     * times; `i64::MAX` means an indefinite pause. A paused domain's own
+     * blocklist entry is ignored, and once the pause expires the domain is
+     * blocked again. Expiry is enforced lazily at query time, so pauses
+     * keep working even when the Android UI process that owns the
+     * countdown timer is gone.
+     */
+    fun `setPauses`(`pauses`: Map<kotlin.String, kotlin.Long>)
+    
+    companion object
+}
+
+/**
+ * The filtering rules: blocklist, allowlist, pauses and the blocking
+ * switch. One instance lives for the whole app process and is shared by
+ * every [DnsProxy] in turn, so rebuilding the tunnel or reconnecting
+ * upstream never needs the lists pushed again. It holds the only copy of
+ * the blocklist; the Android side keeps none.
+ *
+ * Changes take effect on the next query. See [rules] for the matching
+ * rules.
+ */
+open class FilterRules: Disposable, AutoCloseable, FilterRulesInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor() :
+        this(UniffiWithHandle, 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_constructor_filterrules_new(
+    
+        _status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_just_block_rust_fn_free_filterrules(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_just_block_rust_fn_clone_filterrules(handle, status)
+        }
+    }
+
+    
+    /**
+     * Adds one domain to the blocklist.
+     */override fun `addBlocked`(`domain`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_method_filterrules_add_blocked(
+        it,
+        
+        FfiConverterString.lower(`domain`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Empties the blocklist, allowlist and pauses, freeing their memory.
+     */override fun `clear`()
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_method_filterrules_clear(
+        it,
+        _status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Removes one entry from the blocklist. Only that exact entry goes:
+     * the domain stays blocked if a parent domain is listed.
+     */override fun `removeBlocked`(`domain`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_method_filterrules_remove_blocked(
+        it,
+        
+        FfiConverterString.lower(`domain`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Replaces the allowlist (user-whitelisted domains). An allowlisted
+     * domain, and every subdomain of it, is always forwarded, overriding
+     * both the blocklist and expired pauses.
+     */override fun `setAllowlist`(`domains`: List<kotlin.String>)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_method_filterrules_set_allowlist(
+        it,
+        
+        FfiConverterSequenceString.lower(`domains`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * With blocking disabled nothing is blocked and every query is
+     * forwarded. The lists are kept.
+     */override fun `setBlockingEnabled`(`enabled`: kotlin.Boolean)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_method_filterrules_set_blocking_enabled(
+        it,
+        
+        FfiConverterBoolean.lower(`enabled`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Replaces the blocklist with what `builder` has collected. The
+     * builder is left empty.
+     */override fun `setBlocklist`(`builder`: BlocklistBuilder)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_method_filterrules_set_blocklist(
+        it,
+        
+        FfiConverterTypeBlocklistBuilder.lower(`builder`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Replaces the pause set. `pauses` maps domains to epoch-millis expiry
+     * times; `i64::MAX` means an indefinite pause. A paused domain's own
+     * blocklist entry is ignored, and once the pause expires the domain is
+     * blocked again. Expiry is enforced lazily at query time, so pauses
+     * keep working even when the Android UI process that owns the
+     * countdown timer is gone.
+     */override fun `setPauses`(`pauses`: Map<kotlin.String, kotlin.Long>)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_just_block_rust_fn_method_filterrules_set_pauses(
+        it,
+        
+        FfiConverterMapStringLong.lower(`pauses`),_status)
+}
+    }
+    
+    
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFilterRules: FfiConverter<FilterRules, Long> {
+    override fun lower(value: FilterRules): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): FilterRules {
+        return FilterRules(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): FilterRules {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: FilterRules) = 8UL
+
+    override fun write(value: FilterRules, buf: ByteBuffer) {
         buf.putLong(lower(value))
     }
 }
@@ -1571,6 +2428,53 @@ public object FfiConverterTypeDoh3Backup: FfiConverterRustBuffer<Doh3Backup> {
             FfiConverterString.write(value.`path`, buf)
     }
 }
+
+
+
+/**
+ * What [BlocklistBuilder::add_file] did with a file.
+ */
+
+enum class AddFileOutcome {
+    
+    /**
+     * Its domains are in the builder.
+     */
+    ADDED,
+    /**
+     * Left out whole: it would have taken the builder past the limit.
+     */
+    OVER_LIMIT,
+    /**
+     * Missing or unreadable. Domains read before a failure may be in.
+     */
+    UNREADABLE;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAddFileOutcome: FfiConverterRustBuffer<AddFileOutcome> {
+    override fun read(buf: ByteBuffer) = try {
+        AddFileOutcome.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: AddFileOutcome) = 4UL
+
+    override fun write(value: AddFileOutcome, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 

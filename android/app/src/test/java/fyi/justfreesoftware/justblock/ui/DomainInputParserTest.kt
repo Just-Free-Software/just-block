@@ -8,7 +8,10 @@ class DomainInputParserTest {
 
     @Test
     fun fullHttpsUrlWithPath() {
-        assertEquals("example.com", DomainInputParser.extractDomain("https://example.com/article/123"))
+        assertEquals(
+            "example.com",
+            DomainInputParser.extractDomain("https://example.com/article/123")
+        )
     }
 
     @Test
@@ -23,7 +26,10 @@ class DomainInputParserTest {
 
     @Test
     fun wwwPrefixStrippedFromUrl() {
-        assertEquals("example.com", DomainInputParser.extractDomain("https://www.example.com/article"))
+        assertEquals(
+            "example.com",
+            DomainInputParser.extractDomain("https://www.example.com/article")
+        )
     }
 
     @Test
@@ -43,7 +49,10 @@ class DomainInputParserTest {
 
     @Test
     fun httpWithPortAndPath() {
-        assertEquals("example.com", DomainInputParser.extractDomain("http://www.example.com:8080/x"))
+        assertEquals(
+            "example.com",
+            DomainInputParser.extractDomain("http://www.example.com:8080/x")
+        )
     }
 
     @Test
@@ -73,7 +82,10 @@ class DomainInputParserTest {
 
     @Test
     fun subdomainPreserved() {
-        assertEquals("docs.example.com", DomainInputParser.extractDomain("https://docs.example.com/guide"))
+        assertEquals(
+            "docs.example.com",
+            DomainInputParser.extractDomain("https://docs.example.com/guide")
+        )
     }
 
     @Test
@@ -83,7 +95,10 @@ class DomainInputParserTest {
 
     @Test
     fun userInfoIgnored() {
-        assertEquals("example.com", DomainInputParser.extractDomain("https://user:pass@example.com/"))
+        assertEquals(
+            "example.com",
+            DomainInputParser.extractDomain("https://user:pass@example.com/")
+        )
     }
 
     @Test

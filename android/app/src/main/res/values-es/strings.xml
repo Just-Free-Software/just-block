@@ -1,0 +1,109 @@
+<resources>
+    <!-- Common -->
+    <string name="ok">Aceptar</string>
+    <string name="info">Información</string>
+    <string name="add">Añadir</string>
+    <string name="remove">Quitar</string>
+    <string name="delete">Eliminar</string>
+    <string name="example_domain_hint">p. ej. example.com</string>
+    <string name="tab_website">Sitio web</string>
+
+    <!-- Welcome dialog -->
+    <string name="welcome_title">¡Te damos la bienvenida!</string>
+    <string name="welcome_intro">Esta app necesita dos permisos:</string>
+    <string name="welcome_notification_title">Permiso de notificaciones</string>
+    <string name="welcome_notification_body">Te avisa cuando el bloqueador está activo y, sobre todo, evita que el teléfono cierre la app en segundo plano.</string>
+    <string name="welcome_vpn_title">Permiso de VPN</string>
+    <string name="welcome_vpn_body">Usamos una VPN local para filtrar tu tráfico de red y bloquear los dominios seleccionados.</string>
+    <string name="welcome_dont_show_again">No volver a mostrar</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Inicio</string>
+    <string name="nav_blocking">Bloqueo</string>
+    <string name="nav_whitelist">Lista blanca</string>
+
+    <!-- Home screen -->
+    <string name="home_info_body">La VPN se inicia automáticamente con la app y funciona en segundo plano. Para detener la app por completo, pulsa el botón Detener y cerrar.\n\nEsta app no funcionará correctamente con el DNS privado activado. Si nunca has cambiado este ajuste de Android, no tienes que preocuparte.\n\nSi la app deja de funcionar tras largos periodos, puede deberse a la optimización de batería. Considera cambiarla a Sin restricciones en Ajustes &gt; Aplicaciones &gt; Just Block.</string>
+    <plurals name="home_blocked_sites">
+        <item quantity="one">sitio bloqueado</item>
+        <item quantity="many">sitios bloqueados</item>
+        <item quantity="other">sitios bloqueados</item>
+    </plurals>
+    <plurals name="home_whitelisted_sites">
+        <item quantity="one">sitio en lista blanca</item>
+        <item quantity="many">sitios en lista blanca</item>
+        <item quantity="other">sitios en lista blanca</item>
+    </plurals>
+    <string name="home_add_rule">Añadir una regla</string>
+    <string name="home_enable_blocking">Activar bloqueo</string>
+    <string name="home_start_on_boot">Iniciar al encender</string>
+    <string name="home_status">Estado:</string>
+    <string name="home_status_on">ACTIVADA</string>
+    <string name="home_status_off">DESACTIVADA</string>
+    <string name="home_blocklists_updating">(actualizando listas de bloqueo…)</string>
+    <string name="home_blocklists_error">(⚠ error al actualizar las listas de bloqueo)</string>
+    <string name="home_stop_and_close">Detener y cerrar</string>
+    <string name="home_link_website">SITIO WEB</string>
+    <string name="home_link_privacy">PRIVACIDAD</string>
+    <string name="theme_light">Claro</string>
+    <string name="theme_dark">Oscuro</string>
+    <string name="theme_dynamic">Dinámico</string>
+
+    <!-- Blocking screen -->
+    <string name="blocking_info_title">Información sobre el bloqueo</string>
+    <string name="blocking_info_body">Sitio web — Los sitios que añadas aquí se bloquean de inmediato, sin importar qué listas de bloqueo uses. Puedes pausar el bloqueo de un sitio o quitarlo por completo.\n\nListas de bloqueo — Usamos los servidores DNS de AdGuard (con Cloudflare y Google como respaldo automático), que bloquean la mayoría de los anuncios de forma predeterminada. También puedes añadir aquí tus propias URL de listas de bloqueo.</string>
+    <string name="tab_blocklists">Listas de bloqueo</string>
+
+    <!-- Manual (website) block tab -->
+    <string name="manual_empty">Añade un sitio web aquí para bloquearlo.</string>
+    <string name="manual_invalid">No bloqueado: no es un sitio web válido. Introduce un dominio como example.com.</string>
+    <string name="pause_15_minutes">15 minutos</string>
+    <string name="pause_1_hour">1 hora</string>
+    <string name="pause_1_day">1 día</string>
+    <string name="pause_indefinitely">Indefinidamente</string>
+    <string name="paused_indefinitely">en pausa indefinidamente</string>
+    <string name="paused_with_remaining">en pausa · %1$s</string>
+    <string name="remaining_under_minute">quedan &lt;1 min</string>
+    <string name="remaining_minutes">quedan %1$d min</string>
+    <string name="remaining_hours">quedan %1$d h</string>
+    <string name="remaining_days">quedan %1$d d</string>
+    <string name="resume">Reanudar</string>
+    <string name="pause">Pausar</string>
+    <string name="collapse_menu">Contraer menú</string>
+    <string name="expand_menu">Expandir menú</string>
+
+    <!-- Blocklists tab -->
+    <string name="blocklists_empty">Enlaza una lista de bloqueo para bloquear grupos de sitios web.</string>
+    <string name="source_issue_using_saved_copy">No se pudo actualizar; se usa la última copia descargada: %1$s</string>
+    <string name="source_issue_not_loaded">No cargada: %1$s</string>
+    <string name="source_problem_invalid_link">no es un enlace https:// válido.</string>
+    <string name="source_problem_site_not_found">este sitio no existe o no tienes conexión.</string>
+    <string name="source_problem_page_not_found">no hay nada en este enlace.</string>
+    <string name="source_problem_server_error">el sitio devolvió un error. Inténtalo más tarde.</string>
+    <string name="source_problem_download_failed">la descarga falló. Comprueba tu conexión.</string>
+    <string name="source_problem_not_a_blocklist">este enlace no es una lista de bloqueo. Enlaza al archivo de texto sin formato.</string>
+    <string name="source_problem_too_large">esta lista de bloqueo es demasiado grande.</string>
+    <string name="source_problem_over_total_limit">tus listas de bloqueo superan en conjunto el límite de %1$s dominios.</string>
+
+    <!-- Whitelist screen -->
+    <string name="whitelist_info_title">Información sobre la lista blanca</string>
+    <string name="whitelist_info_body">Sitio web — Los dominios de la lista blanca nunca se bloquean. Añadir un sitio a la lista blanca no permite los anuncios a los que ese sitio pueda enlazar.\n\nApps — Las apps seleccionadas omiten la VPN por completo y usan tu conexión normal. El tráfico de todas las demás apps pasa por la VPN para filtrarse.</string>
+    <string name="tab_apps">Apps</string>
+    <string name="whitelist_already">Ya está en la lista blanca</string>
+    <string name="whitelist_invalid">No se pudo leer un dominio — prueba p. ej. example.com</string>
+    <string name="whitelist_empty">Añade un sitio a la lista blanca para que omita el filtrado.</string>
+
+    <!-- Apps tab -->
+    <string name="apps_search_hint">Buscar apps…</string>
+    <string name="apps_loading">Cargando apps… Puede tardar unos segundos.</string>
+    <string name="apps_added_to_bypass">%1$s añadida a la lista de exclusión</string>
+    <string name="apps_removed_from_bypass">%1$s quitada de la lista de exclusión</string>
+    <string name="apps_reset_defaults">Restablecer valores predeterminados</string>
+
+    <!-- VPN notification -->
+    <string name="notification_channel_name">Estado de la VPN</string>
+    <string name="notification_channel_description">Se muestra mientras la VPN de Just Block está activa</string>
+    <string name="notification_title">Just Block está activo</string>
+    <string name="notification_text">Bloqueando anuncios y rastreadores</string>
+    <string name="notification_stop">Detener</string>
+</resources>

@@ -1,0 +1,111 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Common -->
+    <string name="ok">OK</string>
+    <string name="info">Infos</string>
+    <string name="add">Ajouter</string>
+    <string name="remove">Retirer</string>
+    <string name="delete">Supprimer</string>
+    <string name="example_domain_hint">ex. : example.com</string>
+    <string name="tab_website">Site web</string>
+
+    <!-- Welcome dialog -->
+    <string name="welcome_title">Bienvenue !</string>
+    <string name="welcome_intro">Cette application nécessite deux autorisations :</string>
+    <string name="welcome_notification_title">Autorisation des notifications</string>
+    <string name="welcome_notification_body">Elle vous indique quand le bloqueur est actif et, surtout, empêche votre téléphone de fermer l\'application en arrière-plan.</string>
+    <string name="welcome_vpn_title">Autorisation VPN</string>
+    <string name="welcome_vpn_body">Nous utilisons un VPN local pour filtrer votre trafic réseau et bloquer les domaines sélectionnés.</string>
+    <string name="welcome_dont_show_again">Ne plus afficher</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Accueil</string>
+    <string name="nav_blocking">Blocage</string>
+    <string name="nav_whitelist">Liste blanche</string>
+
+    <!-- Home screen -->
+    <string name="home_info_body">Le VPN démarre automatiquement avec l\'application et fonctionne en arrière-plan. Pour arrêter complètement l\'application, appuyez sur le bouton Arrêter et fermer.\n\nCette application ne fonctionnera pas correctement si le DNS privé est activé. Si vous n\'avez jamais modifié ce paramètre Android, vous n\'avez pas à vous en soucier.\n\nSi l\'application cesse de fonctionner après une longue période, l\'optimisation de la batterie peut en être la cause. Pensez à la régler sur Non restreinte dans Paramètres &gt; Applications &gt; Just Block.</string>
+    <!-- The count is shown separately above this label, and the singular is correct for 0 here. -->
+    <plurals name="home_blocked_sites" tools:ignore="ImpliedQuantity">
+        <item quantity="one">site bloqué</item>
+        <item quantity="many">sites bloqués</item>
+        <item quantity="other">sites bloqués</item>
+    </plurals>
+    <!-- The count is shown separately above this label, and the singular is correct for 0 here. -->
+    <plurals name="home_whitelisted_sites" tools:ignore="ImpliedQuantity">
+        <item quantity="one">site en liste blanche</item>
+        <item quantity="many">sites en liste blanche</item>
+        <item quantity="other">sites en liste blanche</item>
+    </plurals>
+    <string name="home_add_rule">Ajouter une règle</string>
+    <string name="home_enable_blocking">Activer le blocage</string>
+    <string name="home_start_on_boot">Lancer au démarrage</string>
+    <string name="home_status">État :</string>
+    <string name="home_status_on">ACTIVÉ</string>
+    <string name="home_status_off">DÉSACTIVÉ</string>
+    <string name="home_blocklists_updating">(mise à jour des listes de blocage…)</string>
+    <string name="home_blocklists_error">(⚠ échec de la mise à jour des listes de blocage)</string>
+    <string name="home_stop_and_close">Arrêter et fermer</string>
+    <string name="home_link_website">SITE WEB</string>
+    <string name="home_link_privacy">CONFIDENTIALITÉ</string>
+    <string name="theme_light">Clair</string>
+    <string name="theme_dark">Sombre</string>
+    <string name="theme_dynamic">Dynamique</string>
+
+    <!-- Blocking screen -->
+    <string name="blocking_info_title">À propos du blocage</string>
+    <string name="blocking_info_body">Site web — Les sites que vous ajoutez ici sont bloqués immédiatement, quelles que soient les listes de blocage utilisées. Vous pouvez suspendre le blocage d\'un site ou le retirer complètement.\n\nListes de blocage — Nous utilisons les serveurs DNS d\'AdGuard (avec Cloudflare et Google en secours automatique), qui bloquent la plupart des publicités par défaut. Vous pouvez aussi ajouter ici les URL de vos propres listes de blocage.</string>
+    <string name="tab_blocklists">Listes de blocage</string>
+
+    <!-- Manual (website) block tab -->
+    <string name="manual_empty">Ajoutez un site web ici pour le bloquer.</string>
+    <string name="manual_invalid">Non bloqué : ce n\'est pas un site web valide. Saisissez un domaine comme example.com.</string>
+    <string name="pause_15_minutes">15 minutes</string>
+    <string name="pause_1_hour">1 heure</string>
+    <string name="pause_1_day">1 jour</string>
+    <string name="pause_indefinitely">Indéfiniment</string>
+    <string name="paused_indefinitely">suspendu indéfiniment</string>
+    <string name="paused_with_remaining">suspendu · %1$s</string>
+    <string name="remaining_under_minute">&lt;1 min restante</string>
+    <string name="remaining_minutes">%1$d min restantes</string>
+    <string name="remaining_hours">%1$d h restantes</string>
+    <string name="remaining_days">%1$d j restants</string>
+    <string name="resume">Reprendre</string>
+    <string name="pause">Suspendre</string>
+    <string name="collapse_menu">Réduire le menu</string>
+    <string name="expand_menu">Développer le menu</string>
+
+    <!-- Blocklists tab -->
+    <string name="blocklists_empty">Ajoutez le lien d\'une liste de blocage pour bloquer des groupes de sites web.</string>
+    <string name="source_issue_using_saved_copy">Mise à jour impossible, utilisation de la dernière copie téléchargée : %1$s</string>
+    <string name="source_issue_not_loaded">Non chargée : %1$s</string>
+    <string name="source_problem_invalid_link">ce n\'est pas un lien https:// valide.</string>
+    <string name="source_problem_site_not_found">ce site n\'existe pas, ou vous êtes hors ligne.</string>
+    <string name="source_problem_page_not_found">il n\'y a rien à ce lien.</string>
+    <string name="source_problem_server_error">le site a renvoyé une erreur. Réessayez plus tard.</string>
+    <string name="source_problem_download_failed">le téléchargement a échoué. Vérifiez votre connexion.</string>
+    <string name="source_problem_not_a_blocklist">ce lien n\'est pas une liste de blocage. Indiquez le lien du fichier texte brut.</string>
+    <string name="source_problem_too_large">cette liste de blocage est trop volumineuse.</string>
+    <string name="source_problem_over_total_limit">l\'ensemble de vos listes de blocage dépasse la limite de %1$s domaines.</string>
+
+    <!-- Whitelist screen -->
+    <string name="whitelist_info_title">À propos de la liste blanche</string>
+    <string name="whitelist_info_body">Site web — Les domaines en liste blanche ne sont jamais bloqués. Mettre un site en liste blanche n\'autorise pas pour autant les publicités vers lesquelles ce site peut renvoyer.\n\nApplications — Les applications sélectionnées contournent entièrement le VPN et utilisent votre connexion habituelle. Le trafic de toutes les autres applications passe par le VPN pour être filtré.</string>
+    <string name="tab_apps">Applications</string>
+    <string name="whitelist_already">Déjà en liste blanche</string>
+    <string name="whitelist_invalid">Impossible d\'en extraire un domaine — essayez par ex. example.com</string>
+    <string name="whitelist_empty">Mettez un site en liste blanche pour qu\'il échappe au filtrage.</string>
+
+    <!-- Apps tab -->
+    <string name="apps_search_hint">Rechercher des applications…</string>
+    <string name="apps_loading">Chargement des applications… Cela peut prendre quelques secondes.</string>
+    <string name="apps_added_to_bypass">%1$s ajoutée à la liste d\'exclusion</string>
+    <string name="apps_removed_from_bypass">%1$s retirée de la liste d\'exclusion</string>
+    <string name="apps_reset_defaults">Rétablir les valeurs par défaut</string>
+
+    <!-- VPN notification -->
+    <string name="notification_channel_name">État du VPN</string>
+    <string name="notification_channel_description">Affichée lorsque le VPN Just Block est actif</string>
+    <string name="notification_title">Just Block est actif</string>
+    <string name="notification_text">Blocage des publicités et des traqueurs</string>
+    <string name="notification_stop">Arrêter</string>
+</resources>

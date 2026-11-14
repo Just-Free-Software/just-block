@@ -1,6 +1,5 @@
 package fyi.justfreesoftware.justblock.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -53,23 +52,22 @@ private val LightColorScheme = lightColorScheme(
 )
 
 enum class ThemeMode {
-    Light, Dark, Dynamic
+    Light,
+    Dark,
+    Dynamic
 }
 
 @Composable
-fun JustBlockTheme(
-    themeMode: ThemeMode = ThemeMode.Dynamic,
-    content: @Composable () -> Unit
-) {
+fun JustBlockTheme(themeMode: ThemeMode = ThemeMode.Dynamic, content: @Composable () -> Unit) {
     val darkTheme = when (themeMode) {
         ThemeMode.Light -> false
         ThemeMode.Dark -> true
         ThemeMode.Dynamic -> isSystemInDarkTheme()
     }
-    
+
     val dynamicColor = themeMode == ThemeMode.Dynamic
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+        dynamicColor -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }

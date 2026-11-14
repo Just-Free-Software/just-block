@@ -1,3 +1,113 @@
 <resources>
-    <string name="app_name">Just Block</string>
+    <string name="app_name" translatable="false">Just Block</string>
+
+    <!-- Common -->
+    <string name="ok">OK</string>
+    <string name="info">Info</string>
+    <string name="add">Add</string>
+    <string name="remove">Remove</string>
+    <string name="delete">Delete</string>
+    <string name="example_domain_hint">e.g. example.com</string>
+    <string name="tab_website">Website</string>
+
+    <!-- Welcome dialog -->
+    <string name="welcome_title">Welcome!</string>
+    <string name="welcome_intro">This app requires two permissions:</string>
+    <string name="welcome_notification_title">Notification Permission</string>
+    <string name="welcome_notification_body">This notifies you when the blocker is active and more importantly, ensures that your phone doesn\'t kill the app in the background.</string>
+    <string name="welcome_vpn_title">VPN Permission</string>
+    <string name="welcome_vpn_body">We use a local VPN to filter your network traffic and block selected domains.</string>
+    <string name="welcome_dont_show_again">Don\'t show again</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_blocking">Blocking</string>
+    <string name="nav_whitelist">Whitelist</string>
+
+    <!-- Home screen -->
+    <string name="home_info_body">The VPN automatically starts with the app and runs in the background. To stop the app completely, press the Stop &amp; Close button.\n\nThis app will not work properly with private DNS enabled. If you have not touched this Android setting before, you don\'t need to worry about this.\n\nIf the app stops working after long periods it could be due to battery optimization. Consider changing this under Settings &gt; Apps &gt; Just Block to Unrestricted.</string>
+    <plurals name="home_blocked_sites">
+        <item quantity="one">blocked site</item>
+        <item quantity="other">blocked sites</item>
+    </plurals>
+    <plurals name="home_whitelisted_sites">
+        <item quantity="one">whitelisted site</item>
+        <item quantity="other">whitelisted sites</item>
+    </plurals>
+    <string name="home_add_rule">Add a rule</string>
+    <string name="home_enable_blocking">Enable blocking</string>
+    <string name="home_start_on_boot">Start on boot</string>
+    <string name="home_status">Status:</string>
+    <string name="home_status_on">ON</string>
+    <string name="home_status_off">OFF</string>
+    <string name="home_blocklists_updating">(updating blocklists…)</string>
+    <string name="home_blocklists_error">(⚠ error updating blocklists)</string>
+    <string name="home_stop_and_close">Stop &amp; Close</string>
+    <string name="home_link_website">WEBSITE</string>
+    <string name="home_link_privacy">PRIVACY</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_dynamic">Dynamic</string>
+
+    <!-- Blocking screen -->
+    <string name="blocking_info_title">Blocking Info</string>
+    <string name="blocking_info_body">Website — Websites you add here are blocked right away, no matter which blocklists you use. You can pause blocking for a site or remove it entirely.\n\nBlocklists — We use AdGuard\'s DNS servers (with Cloudflare and Google as automatic fallbacks), which blocks most ads by default. You can also add your own blocklist URLs here.</string>
+    <string name="tab_blocklists">Blocklists</string>
+
+    <!-- Manual (website) block tab -->
+    <string name="manual_empty">Add a website here to block it.</string>
+    <string name="manual_invalid">Not blocked: this isn\'t a valid website. Enter a domain like example.com.</string>
+    <string name="pause_15_minutes">15 minutes</string>
+    <string name="pause_1_hour">1 hour</string>
+    <string name="pause_1_day">1 day</string>
+    <string name="pause_indefinitely">Indefinitely</string>
+    <string name="paused_indefinitely">paused indefinitely</string>
+    <!-- %1$s is the remaining time, e.g. "14m left" -->
+    <string name="paused_with_remaining">paused · %1$s</string>
+    <string name="remaining_under_minute">&lt;1m left</string>
+    <string name="remaining_minutes">%1$dm left</string>
+    <string name="remaining_hours">%1$dh left</string>
+    <string name="remaining_days">%1$dd left</string>
+    <string name="resume">Resume</string>
+    <string name="pause">Pause</string>
+    <string name="collapse_menu">Collapse menu</string>
+    <string name="expand_menu">Expand menu</string>
+
+    <!-- Blocklists tab -->
+    <string name="blocklists_empty">Link to a blocklist to block groups of websites.</string>
+    <!-- %1$s is one of the source_problem_* reasons below -->
+    <string name="source_issue_using_saved_copy">Couldn\'t update, using the last downloaded copy: %1$s</string>
+    <string name="source_issue_not_loaded">Not loaded: %1$s</string>
+    <string name="source_problem_invalid_link">this isn\'t a valid https:// link.</string>
+    <string name="source_problem_site_not_found">this site doesn\'t exist, or you\'re offline.</string>
+    <string name="source_problem_page_not_found">nothing exists at this link.</string>
+    <string name="source_problem_server_error">the site returned an error. Try again later.</string>
+    <string name="source_problem_download_failed">the download failed. Check your connection.</string>
+    <string name="source_problem_not_a_blocklist">this link isn\'t a blocklist. Link to the raw text file.</string>
+    <string name="source_problem_too_large">this blocklist is too large.</string>
+    <!-- %1$s is the domain limit, already formatted for the locale (e.g. "3,000,000") -->
+    <string name="source_problem_over_total_limit">your blocklists together are over the %1$s domain limit.</string>
+
+    <!-- Whitelist screen -->
+    <string name="whitelist_info_title">Whitelist Info</string>
+    <string name="whitelist_info_body">Website — Whitelisted domains are never blocked. Whitelisting a site does not whitelist the ads that the site might link to.\n\nApps — Selected apps bypass the VPN entirely and use your normal connection. All other apps will have their traffic routed through the VPN to be filtered.</string>
+    <string name="tab_apps">Apps</string>
+    <string name="whitelist_already">Already whitelisted</string>
+    <string name="whitelist_invalid">Couldn\'t read a domain from that — try e.g. example.com</string>
+    <string name="whitelist_empty">Whitelist a site to allow it to bypass filtering.</string>
+
+    <!-- Apps tab -->
+    <string name="apps_search_hint">Search apps…</string>
+    <string name="apps_loading">Loading apps… This may take a few seconds.</string>
+    <!-- %1$s is the app name -->
+    <string name="apps_added_to_bypass">%1$s added to bypass list</string>
+    <string name="apps_removed_from_bypass">%1$s removed from bypass list</string>
+    <string name="apps_reset_defaults">Reset to defaults</string>
+
+    <!-- VPN notification -->
+    <string name="notification_channel_name">VPN Status</string>
+    <string name="notification_channel_description">Shows while Just Block VPN is active</string>
+    <string name="notification_title">Just Block is active</string>
+    <string name="notification_text">Blocking ads and trackers</string>
+    <string name="notification_stop">Stop</string>
 </resources>

@@ -27,12 +27,8 @@ async fn main() {
         0x00, 0x01, // Class IN
     ];
 
-    let len = (query.len() as u16).to_be_bytes();
-    let mut payload = Vec::new();
-    payload.extend_from_slice(&len);
-    payload.extend_from_slice(&query);
-
-    let resp = doq.send_query(&payload).await.unwrap();
+    // send_query adds the 2-byte DoQ length prefix itself.
+    let resp = doq.send_query(&query).await.unwrap();
     println!("Received response: {} bytes", resp.len());
     println!("{:?}", resp);
 }

@@ -4,6 +4,7 @@ mod proxy;
 
 mod doh3;
 mod quic;
+mod rules;
 #[cfg(test)]
 mod wire_test_util;
 
@@ -14,7 +15,7 @@ use proxy::{
     parse_query,
 };
 use quic::{DoqClient, QuicEndpoint};
-use radix_trie::Trie;
+use rules::{DomainSet, Rules};
 use std::collections::HashMap;
 use std::os::fd::RawFd;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -56,6 +57,10 @@ const FAILED_UPSTREAM_BACKOFF: Duration = Duration::from_secs(30);
 struct RunSlot {
     generation: u64,
     token: Option<CancellationToken>,
+    /// Disconnects once the current run's task has fully exited and released
+    /// the TUN fd (its sender is dropped as the task's last act). Lets
+    /// [DnsProxy::stop_and_wait] block until the fd is safe to reuse.
+    exited: Option<std::sync::mpsc::Receiver<()>>,
 }
 
 /// A backup upstream reachable over DoH3 (DNS over HTTP/3, RFC 8484 body
@@ -72,9 +77,7 @@ pub struct Doh3Backup {
 pub struct DnsProxy {
     tun_fd: i32,
     quic_fds: Vec<i32>,
-    blocklist: Arc<RwLock<Trie<Vec<u8>, ()>>>,
-    allowlist: Arc<RwLock<Trie<Vec<u8>, ()>>>,
-    pauses: Arc<RwLock<Trie<Vec<u8>, i64>>>,
+    rules: Arc<FilterRules>,
     run_slot: Arc<Mutex<RunSlot>>,
     upstreams: Vec<Arc<Upstream>>,
 }
@@ -88,6 +91,7 @@ impl DnsProxy {
         upstream_v6: Option<String>,
         sni_hostname: String,
         doh3_backups: Vec<Doh3Backup>,
+        rules: Arc<FilterRules>,
     ) -> Arc<Self> {
         let _guard = get_runtime().enter();
         let upstream_v4 = upstream_v4.and_then(|s| match s.parse::<std::net::IpAddr>() {
@@ -177,9 +181,7 @@ impl DnsProxy {
         Arc::new(Self {
             tun_fd,
             quic_fds,
-            blocklist: Arc::new(RwLock::new(Trie::new())),
-            allowlist: Arc::new(RwLock::new(Trie::new())),
-            pauses: Arc::new(RwLock::new(Trie::new())),
+            rules,
             run_slot: Arc::new(Mutex::new(RunSlot::default())),
             upstreams,
         })
@@ -202,10 +204,45 @@ impl DnsProxy {
         }
     }
 
+    /// Like [stop](Self::stop), but blocks until the proxy task has exited
+    /// and released the TUN fd, or `timeout_ms` elapses. Returns true when
+    /// the task is gone (or none was running) and false on timeout.
+    ///
+    /// The Android side calls this before starting another proxy on the
+    /// same TUN fd, or before closing the TUN, so the old task's reactor
+    /// registration can never collide with the next one. Blocking: never
+    /// call it from the main thread or from inside the Tokio runtime.
+    pub fn stop_and_wait(&self, timeout_ms: u64) -> bool {
+        let (generation, exited) = {
+            let mut slot = self.lock_run_slot();
+            if let Some(token) = slot.token.take() {
+                token.cancel();
+            }
+            (slot.generation, slot.exited.take())
+        };
+        let Some(exited) = exited else {
+            return true;
+        };
+        // The task never sends; recv only returns once its sender is dropped.
+        match exited.recv_timeout(Duration::from_millis(timeout_ms)) {
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                // Still running: keep the receiver so a later call can wait
+                // again, unless a newer run has replaced it.
+                let mut slot = self.lock_run_slot();
+                if slot.generation == generation && slot.exited.is_none() {
+                    slot.exited = Some(exited);
+                }
+                false
+            }
+            _ => true,
+        }
+    }
+
     /// Starts the proxy task. Idempotent: if a task is already running
     /// (and has not been stopped), this is a no-op — it can never spawn a
     /// second reader on the same TUN fd.
     pub fn start(&self) {
+        let (exit_tx, exit_rx) = std::sync::mpsc::channel::<()>();
         let (generation, cancel_token) = {
             let mut slot = self.lock_run_slot();
             if let Some(token) = &slot.token {
@@ -216,62 +253,30 @@ impl DnsProxy {
             slot.generation += 1;
             let token = CancellationToken::new();
             slot.token = Some(token.clone());
+            slot.exited = Some(exit_rx);
             (slot.generation, token)
         };
 
         let tun_fd = self.tun_fd;
-        let blocklist = self.blocklist.clone();
-        let allowlist = self.allowlist.clone();
-        let pauses = self.pauses.clone();
+        let rules = self.rules.clone();
         let upstreams = self.upstreams.clone();
         let run_slot = self.run_slot.clone();
 
         get_runtime().spawn(async move {
-            run_proxy(tun_fd, upstreams, blocklist, allowlist, pauses, cancel_token).await;
+            run_proxy(tun_fd, upstreams, rules, cancel_token).await;
             // Clear the slot on exit (both natural exit and cancellation) so
             // a subsequent start() works. The generation check ensures a
             // stale task never clears a newer run's token.
-            let mut slot = run_slot.lock().unwrap_or_else(|e| e.into_inner());
-            if slot.generation == generation {
-                slot.token = None;
+            {
+                let mut slot = run_slot.lock().unwrap_or_else(|e| e.into_inner());
+                if slot.generation == generation {
+                    slot.token = None;
+                }
             }
+            // Last act: run_proxy has returned, so its AsyncFd is dropped
+            // and the TUN fd is deregistered. Wakes stop_and_wait.
+            drop(exit_tx);
         });
-    }
-
-    pub fn update_blocklist(&self, domains: Vec<String>) {
-        #[cfg_attr(
-            not(all(target_os = "android", feature = "dns-trace")),
-            allow(unused_variables)
-        )]
-        let requested = domains.len();
-        let trie = domain_trie(domains);
-        log_trace!(&format!(
-            "update_blocklist: {} entries requested, {} inserted",
-            requested,
-            // Fully qualified: a `use` of the trait would be unused (and
-            // warn) in builds where log_trace! compiles to nothing.
-            radix_trie::TrieCommon::len(&trie)
-        ));
-        *self.blocklist.write().unwrap_or_else(|e| e.into_inner()) = trie;
-    }
-
-    /// Replaces the allowlist (user-whitelisted domains). An allowlisted
-    /// domain — and every subdomain of it — is always forwarded, overriding
-    /// both the blocklist and expired pauses.
-    pub fn update_allowlist(&self, domains: Vec<String>) {
-        log_trace!(&format!("update_allowlist: {} entries", domains.len()));
-        let trie = domain_trie(domains);
-        *self.allowlist.write().unwrap_or_else(|e| e.into_inner()) = trie;
-    }
-
-    /// Replaces the pause set. `pauses` maps lowercased domains to epoch-millis
-    /// expiry times; `i64::MAX` means an indefinite pause. Pauses are enforced
-    /// lazily at query time (see [pause_expired]), so they keep working even
-    /// when the Android UI process that owns the countdown timer is gone.
-    pub fn update_pauses(&self, pauses: HashMap<String, i64>) {
-        log_trace!(&format!("update_pauses: {} entries", pauses.len()));
-        let trie = pauses_trie(pauses);
-        *self.pauses.write().unwrap_or_else(|e| e.into_inner()) = trie;
     }
 }
 
@@ -281,17 +286,154 @@ impl DnsProxy {
     }
 }
 
-/// Convert a domain string to a reversed, lowercased wire-format key for the trie.
+/// The filtering rules: blocklist, allowlist, pauses and the blocking
+/// switch. One instance lives for the whole app process and is shared by
+/// every [DnsProxy] in turn, so rebuilding the tunnel or reconnecting
+/// upstream never needs the lists pushed again. It holds the only copy of
+/// the blocklist; the Android side keeps none.
+///
+/// Changes take effect on the next query. See [rules] for the matching
+/// rules.
+#[derive(uniffi::Object, Default)]
+pub struct FilterRules {
+    inner: RwLock<Rules>,
+}
+
+#[uniffi::export]
+impl FilterRules {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    /// Replaces the blocklist with what `builder` has collected. The
+    /// builder is left empty.
+    pub fn set_blocklist(&self, builder: Arc<BlocklistBuilder>) {
+        let mut blocklist = std::mem::take(&mut *builder.lock());
+        blocklist.shrink_to_fit();
+        log_trace!(&format!("set_blocklist: {} entries", blocklist.len()));
+        self.write().blocklist = blocklist;
+    }
+
+    /// Adds one domain to the blocklist.
+    pub fn add_blocked(&self, domain: String) {
+        self.write().blocklist.insert(&domain);
+    }
+
+    /// Removes one entry from the blocklist. Only that exact entry goes:
+    /// the domain stays blocked if a parent domain is listed.
+    pub fn remove_blocked(&self, domain: String) {
+        self.write().blocklist.remove(&domain);
+    }
+
+    /// Replaces the allowlist (user-whitelisted domains). An allowlisted
+    /// domain, and every subdomain of it, is always forwarded, overriding
+    /// both the blocklist and expired pauses.
+    pub fn set_allowlist(&self, domains: Vec<String>) {
+        log_trace!(&format!("set_allowlist: {} entries", domains.len()));
+        self.write().allowlist = domains.into_iter().collect();
+    }
+
+    /// Replaces the pause set. `pauses` maps domains to epoch-millis expiry
+    /// times; `i64::MAX` means an indefinite pause. A paused domain's own
+    /// blocklist entry is ignored, and once the pause expires the domain is
+    /// blocked again. Expiry is enforced lazily at query time, so pauses
+    /// keep working even when the Android UI process that owns the
+    /// countdown timer is gone.
+    pub fn set_pauses(&self, pauses: HashMap<String, i64>) {
+        log_trace!(&format!("set_pauses: {} entries", pauses.len()));
+        self.write().set_pauses(pauses);
+    }
+
+    /// With blocking disabled nothing is blocked and every query is
+    /// forwarded. The lists are kept.
+    pub fn set_blocking_enabled(&self, enabled: bool) {
+        self.write().blocking_enabled = enabled;
+    }
+
+    /// Empties the blocklist, allowlist and pauses, freeing their memory.
+    pub fn clear(&self) {
+        self.write().clear();
+    }
+}
+
+impl FilterRules {
+    fn read(&self) -> std::sync::RwLockReadGuard<'_, Rules> {
+        self.inner.read().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn write(&self) -> std::sync::RwLockWriteGuard<'_, Rules> {
+        self.inner.write().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+/// What [BlocklistBuilder::add_file] did with a file.
+#[derive(uniffi::Enum, Debug, PartialEq, Eq)]
+pub enum AddFileOutcome {
+    /// Its domains are in the builder.
+    Added,
+    /// Left out whole: it would have taken the builder past the limit.
+    OverLimit,
+    /// Missing or unreadable. Domains read before a failure may be in.
+    Unreadable,
+}
+
+/// Collects a new blocklist a batch at a time, so the Android side can
+/// stream domains across without ever holding the whole list. Hand it to
+/// [FilterRules::set_blocklist] when done.
+#[derive(uniffi::Object, Default)]
+pub struct BlocklistBuilder {
+    domains: Mutex<DomainSet>,
+}
+
+#[uniffi::export]
+impl BlocklistBuilder {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    /// Adds a batch of domains. Duplicates and invalid names are dropped.
+    pub fn add(&self, domains: Vec<String>) {
+        self.lock().extend(domains);
+    }
+
+    /// Adds every domain in the file at `path` (one per line, as the
+    /// Android side's blocklist cache stores them), unless the file's line
+    /// count would take the builder past `limit` domains. Reading the file
+    /// here is far cheaper than passing each domain across as a string.
+    pub fn add_file(&self, path: String, limit: u64) -> AddFileOutcome {
+        let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+        match self.lock().extend_from_file(std::path::Path::new(&path), limit) {
+            Ok(true) => AddFileOutcome::Added,
+            Ok(false) => AddFileOutcome::OverLimit,
+            Err(_) => AddFileOutcome::Unreadable,
+        }
+    }
+
+    /// Distinct domains collected so far.
+    pub fn count(&self) -> u64 {
+        self.lock().len() as u64
+    }
+}
+
+impl BlocklistBuilder {
+    fn lock(&self) -> std::sync::MutexGuard<'_, DomainSet> {
+        self.domains.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+/// Convert a domain string to a reversed, lowercased wire-format key.
 /// "example.com" → \x03com\x07example  (no trailing \x00)
 ///
-/// Reversed so that `get_ancestor_value` can match subdomains:
-/// blocking "example.com" (key: \x03com\x07example) will match
-/// a query for "ads.example.com" (key: \x03com\x07example\x03ads)
-/// because the parent key is a byte-prefix of the child key.
+/// Reversed so that a parent domain's key is a prefix of its subdomains'
+/// keys: "example.com" (key: \x03com\x07example) is a prefix of
+/// "ads.example.com" (key: \x03com\x07example\x03ads). Lookups walk
+/// those prefixes; see [rules].
 ///
 /// Returns `None` if any label exceeds the 63-byte DNS label limit or the
 /// name exceeds 255 bytes, so malformed blocklist entries are rejected
-/// rather than silently producing truncated/garbage trie keys.
+/// rather than silently producing truncated/garbage keys.
 pub(crate) fn domain_to_wire_format(domain: &str) -> Option<Vec<u8>> {
     let mut out = Vec::new();
     let parts: Vec<&str> = domain.split('.').filter(|p| !p.is_empty()).collect();
@@ -303,61 +445,6 @@ pub(crate) fn domain_to_wire_format(domain: &str) -> Option<Vec<u8>> {
         out.extend_from_slice(part.to_ascii_lowercase().as_bytes());
     }
     Some(out)
-}
-
-/// Builds a reversed wire-format trie from a domain list, skipping entries
-/// that aren't valid DNS names.
-pub(crate) fn domain_trie(domains: Vec<String>) -> Trie<Vec<u8>, ()> {
-    let mut trie = Trie::new();
-    for domain in domains {
-        if let Some(wire_format) = domain_to_wire_format(&domain) {
-            trie.insert(wire_format, ());
-        }
-    }
-    trie
-}
-
-/// Converts a domain → expiry map into a reversed wire-format trie, using the
-/// same key encoding as the blocklist trie so ancestor matching is identical.
-pub(crate) fn pauses_trie(pauses: HashMap<String, i64>) -> Trie<Vec<u8>, i64> {
-    let mut trie = Trie::new();
-    for (domain, expires_at) in pauses {
-        if let Some(wire_format) = domain_to_wire_format(&domain) {
-            trie.insert(wire_format, expires_at);
-        }
-    }
-    trie
-}
-
-/// Pure expiry predicate: true when a pause lapsed by `now_ms`.
-fn pause_expired(now_ms: i64, expiry: i64) -> bool {
-    now_ms >= expiry
-}
-
-/// Query-path pause check. Ancestor matching mirrors the blocklist trie
-/// (pausing "example.com" covers "sub.example.com"). The clock is only read
-/// when a pause actually covers `trie_key`, so unpause-covered queries pay
-/// nothing beyond the trie lookup.
-fn pause_lazily_expired(pauses: &Trie<Vec<u8>, i64>, trie_key: &[u8]) -> bool {
-    match pauses.get_ancestor_value(trie_key) {
-        Some(&expiry) => pause_expired(now_epoch_ms(), expiry),
-        None => false,
-    }
-}
-
-/// Query-path block decision. The allowlist wins over everything: a
-/// whitelisted domain (or any subdomain of it) is never blocked, even if
-/// it or a parent is on the blocklist or has a lapsed pause.
-fn should_block(
-    blocklist: &Trie<Vec<u8>, ()>,
-    allowlist: &Trie<Vec<u8>, ()>,
-    pauses: &Trie<Vec<u8>, i64>,
-    trie_key: &[u8],
-) -> bool {
-    if allowlist.get_ancestor_value(trie_key).is_some() {
-        return false;
-    }
-    blocklist.get_ancestor_value(trie_key).is_some() || pause_lazily_expired(pauses, trie_key)
 }
 
 fn now_epoch_ms() -> i64 {
@@ -378,8 +465,8 @@ macro_rules! log_trace {
 }
 use log_trace;
 
-/// Debug logging to Android logcat (tag: justblock-rust). Temporarily
-/// wired into log_trace below for on-device regression diagnosis.
+/// Debug logging to Android logcat (tag: justblock-rust). Only compiled
+/// into debug Android builds; it is what [log_trace] writes through.
 #[cfg(all(target_os = "android", feature = "dns-trace"))]
 mod android_log {
     #[link(name = "log")]
@@ -732,9 +819,7 @@ async fn write_tun(fd: &AsyncFd<RawFd>, packet: &[u8]) -> std::io::Result<()> {
 async fn run_proxy(
     tun_fd: i32,
     upstreams: Vec<Arc<Upstream>>,
-    blocklist: Arc<RwLock<Trie<Vec<u8>, ()>>>,
-    allowlist: Arc<RwLock<Trie<Vec<u8>, ()>>>,
-    pauses: Arc<RwLock<Trie<Vec<u8>, i64>>>,
+    rules: Arc<FilterRules>,
     cancel_token: CancellationToken,
 ) {
     log_trace!("run_proxy started");
@@ -803,131 +888,163 @@ async fn run_proxy(
 
     loop {
         tokio::select! {
-            _ = cancel_token.cancelled() => {
-                break;
-            }
+            _ = cancel_token.cancelled() => break,
             Some(packet) = rx.recv() => {
-                if let Err(_e) = write_tun(&async_fd, &packet).await {
-                    // A failed write drops this response but must not kill
-                    // the proxy — read errors handle a genuinely dead TUN.
-                    log_trace!(&format!("TUN write failed (dropping packet): {}", _e));
+                // Cancellable, so a TUN that never becomes writable can't
+                // keep a stopped proxy alive.
+                tokio::select! {
+                    _ = cancel_token.cancelled() => break,
+                    res = write_tun(&async_fd, &packet) => {
+                        if let Err(_e) = res {
+                            // A failed write drops this response but must not
+                            // kill the proxy — read errors handle a genuinely
+                            // dead TUN.
+                            log_trace!(&format!("TUN write failed (dropping packet): {}", _e));
+                        }
+                    }
                 }
             }
             res = async_fd.readable() => {
-                let mut guard = match res {
-                    Ok(g) => g,
-                    Err(_) => continue,
+                let Ok(mut guard) = res else { continue };
+
+                let n = unsafe {
+                    libc::read(tun_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
                 };
-
-        match unsafe { libc::read(tun_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) } {
-            n if n > 0 => {
-                let n = n as usize;
-                let pkt = &buf[..n];
-
-                if let Ok(sliced) = SlicedPacket::from_ip(pkt) {
-                    if let Some(TransportSlice::Udp(udp)) = sliced.transport.as_ref() {
-                        if udp.destination_port() == 53 {
-                            let payload = udp.payload();
-                            if let Some(trie_key) = parse_query(payload) {
-                                let blocked = should_block(
-                                    &blocklist.read().unwrap_or_else(|e| e.into_inner()),
-                                    &allowlist.read().unwrap_or_else(|e| e.into_inner()),
-                                    &pauses.read().unwrap_or_else(|e| e.into_inner()),
-                                    &trie_key,
-                                );
-
-                                if blocked {
-                                    log_trace!(&format!("BLOCKED {} -> NXDOMAIN", qname_str(payload)));
-                                    // Re-parse is intentional and cheap: the builders need
-                                    // the full Message, not just the derived keys.
-                                    if let Ok(query) = domain::base::message::Message::from_slice(payload) {
-                                        if let Some(null_resp) = build_null_response(&query) {
-                                            // Wrap in IP/UDP headers before writing to the TUN —
-                                            // a bare DNS payload is not a valid TUN packet.
-                                            if let Some(resp) = create_forwarded_response(&sliced, payload, &null_resp) {
-                                                // Read-loop sends must not block on a full
-                                                // channel; dropping is the deliberate policy.
-                                                if tx.try_send(resp).is_err() {
-                                                    log_trace!("response channel full — dropped NXDOMAIN");
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    // Forward upstream (spawned task owns all it needs)
-                                    log_trace!(&format!("FORWARD {}", qname_str(payload)));
-                                    match semaphore.clone().try_acquire_owned() {
-                                        Ok(permit) => {
-                                        let upstreams = upstreams.clone();
-                                        let payload_vec = payload.to_vec();
-                                        let req_ip = pkt.to_vec();
-                                        let tx_clone = tx.clone();
-                                        let task_token = cancel_token.clone();
-                                        tokio::spawn(async move {
-                                            let _permit = permit;
-                                            tokio::select! {
-                                                _ = task_token.cancelled() => {}
-                                                _ = forward_query(
-                                                    &upstreams,
-                                                    &payload_vec,
-                                                    &req_ip,
-                                                    &tx_clone,
-                                                ) => {}
-                                            }
-                                        });
-                                        }
-                                        Err(_) => {
-                                            // Semaphore full: return SERVFAIL immediately
-                                            // to prevent app hangs
-                                            if let Ok(query) = domain::base::message::Message::from_slice(payload) {
-                                                if let Some(servfail) = build_servfail_response(&query) {
-                                                    if let Some(resp) = create_forwarded_response(&sliced, payload, &servfail) {
-                                                        if tx.try_send(resp).is_err() {
-                                                            log_trace!("response channel full — dropped SERVFAIL");
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            // Non-DNS UDP to the VPN's fake DNS addresses:
-                            // drop silently (no ICMP amplification).
-                        }
-                    } else if let Some(TransportSlice::Tcp(_)) = sliced.transport.as_ref() {
-                        // Deliberate policy: only DNS (UDP/53) is proxied.
-                        // DNS-over-TCP is not supported, and nothing else is
-                        // expected to reach the TUN (only the fake DNS
-                        // addresses are routed into it), so all TCP gets a
-                        // RST rather than being silently blackholed.
-                        if let Some(resp) = create_tcp_rst(&sliced) {
-                            if tx.try_send(resp).is_err() {
-                                log_trace!("response channel full — dropped TCP RST");
-                            }
-                        }
+                if n < 0 {
+                    let err = std::io::Error::last_os_error();
+                    if err.kind() == std::io::ErrorKind::WouldBlock {
+                        guard.clear_ready();
+                        continue;
                     }
-                    // All other traffic (ICMP, etc.): drop.
-                }
-            }
-            n if n < 0 => {
-                let err = std::io::Error::last_os_error();
-                if err.kind() == std::io::ErrorKind::WouldBlock {
-                    guard.clear_ready();
-                } else {
                     log_trace!(&format!("Read error: {}", err));
                     break;
                 }
-            }
-            _ => {
-                log_trace!("TUN closed / EOF");
-                break;
+                if n == 0 {
+                    log_trace!("TUN closed / EOF");
+                    break;
+                }
+                let pkt = &buf[..n as usize];
+
+                let action = classify_packet(pkt, &rules.read());
+                match action {
+                    PacketAction::Respond(resp) => try_respond(&tx, resp),
+                    PacketAction::Forward(payload) => {
+                        match semaphore.clone().try_acquire_owned() {
+                            Ok(permit) => {
+                                // The spawned task owns everything it needs.
+                                let upstreams = upstreams.clone();
+                                let req_ip = pkt.to_vec();
+                                let tx = tx.clone();
+                                let task_token = cancel_token.clone();
+                                tokio::spawn(async move {
+                                    let _permit = permit;
+                                    tokio::select! {
+                                        _ = task_token.cancelled() => {}
+                                        _ = forward_query(&upstreams, &payload, &req_ip, &tx) => {}
+                                    }
+                                });
+                            }
+                            Err(_) => {
+                                // Too many queries in flight: answer SERVFAIL
+                                // now rather than leave the app hanging.
+                                if let Some(resp) = local_response_for(pkt, &payload, LocalAnswer::Servfail) {
+                                    try_respond(&tx, resp);
+                                }
+                            }
+                        }
+                    }
+                    PacketAction::Drop => {}
+                }
             }
         }
-            } // end res = async_fd.readable()
-        } // end tokio::select!
-    } // end loop
+    }
+}
+
+/// What the read loop should do with one packet read from the TUN.
+#[cfg_attr(test, derive(Debug))]
+enum PacketAction {
+    /// Write this complete IP packet back to the TUN.
+    Respond(Vec<u8>),
+    /// Forward this DNS payload upstream.
+    Forward(Vec<u8>),
+    /// Ignore the packet.
+    Drop,
+}
+
+/// Decides what to do with one raw IP packet from the TUN. Pure: no I/O, no
+/// clock beyond the lazy pause check, so the policy is testable on its own.
+///
+/// Only DNS over UDP/53 is proxied. DNS-over-TCP is deliberately not
+/// supported, and nothing else is expected to reach the TUN (only the fake
+/// DNS addresses are routed into it), so all TCP gets a RST rather than
+/// being silently blackholed. Non-DNS UDP, ICMP and anything unparseable
+/// are dropped silently (no ICMP amplification).
+fn classify_packet(
+    pkt: &[u8],
+    rules: &Rules,
+) -> PacketAction {
+    let Ok(sliced) = SlicedPacket::from_ip(pkt) else {
+        return PacketAction::Drop;
+    };
+    match sliced.transport.as_ref() {
+        Some(TransportSlice::Udp(udp)) => {
+            if udp.destination_port() != 53 {
+                return PacketAction::Drop;
+            }
+            let payload = udp.payload();
+            let Some(key) = parse_query(payload) else {
+                return PacketAction::Drop;
+            };
+            if rules.should_block(&key) {
+                log_trace!(&format!("BLOCKED {} -> NXDOMAIN", qname_str(payload)));
+                local_response(&sliced, payload, LocalAnswer::Nxdomain)
+                    .map_or(PacketAction::Drop, PacketAction::Respond)
+            } else {
+                log_trace!(&format!("FORWARD {}", qname_str(payload)));
+                PacketAction::Forward(payload.to_vec())
+            }
+        }
+        Some(TransportSlice::Tcp(_)) => {
+            create_tcp_rst(&sliced).map_or(PacketAction::Drop, PacketAction::Respond)
+        }
+        _ => PacketAction::Drop,
+    }
+}
+
+/// An answer the proxy generates itself instead of asking an upstream.
+#[derive(Clone, Copy)]
+enum LocalAnswer {
+    /// The domain is blocked.
+    Nxdomain,
+    /// The query can't be forwarded (overload, or every upstream failed).
+    Servfail,
+}
+
+/// Builds a locally generated DNS answer to `payload` and wraps it in IP/UDP
+/// headers mirrored from the request — a bare DNS payload is not a valid TUN
+/// packet. The payload is re-parsed on purpose: the builders need the full
+/// message, which is cheap to get again.
+fn local_response(sliced: &SlicedPacket, payload: &[u8], answer: LocalAnswer) -> Option<Vec<u8>> {
+    let query = domain::base::message::Message::from_slice(payload).ok()?;
+    let dns = match answer {
+        LocalAnswer::Nxdomain => build_null_response(query)?,
+        LocalAnswer::Servfail => build_servfail_response(query)?,
+    };
+    create_forwarded_response(sliced, payload, &dns)
+}
+
+/// [local_response] for callers holding the raw request packet.
+fn local_response_for(req_ip: &[u8], payload: &[u8], answer: LocalAnswer) -> Option<Vec<u8>> {
+    let sliced = SlicedPacket::from_ip(req_ip).ok()?;
+    local_response(&sliced, payload, answer)
+}
+
+/// Queues a response from the read loop. The loop must never block on a
+/// full channel, so dropping the packet is the deliberate policy.
+fn try_respond(tx: &mpsc::Sender<Vec<u8>>, resp: Vec<u8>) {
+    if tx.try_send(resp).is_err() {
+        log_trace!("response channel full — dropped a response");
+    }
 }
 
 /// Forwards one DNS query upstream and delivers the response on `tx`.
@@ -1013,14 +1130,8 @@ async fn forward_query(
 /// Builds a SERVFAIL answer, wraps it in IP/UDP headers from the original
 /// request packet, and delivers it on `tx`.
 async fn send_servfail(req_ip: &[u8], payload: &[u8], tx: &mpsc::Sender<Vec<u8>>) {
-    if let Ok(query) = domain::base::message::Message::from_slice(payload) {
-        if let Some(servfail) = build_servfail_response(&query) {
-            if let Ok(sliced) = SlicedPacket::from_ip(req_ip) {
-                if let Some(resp) = create_forwarded_response(&sliced, payload, &servfail) {
-                    let _ = tx.send(resp).await;
-                }
-            }
-        }
+    if let Some(resp) = local_response_for(req_ip, payload, LocalAnswer::Servfail) {
+        let _ = tx.send(resp).await;
     }
 }
 
@@ -1038,143 +1149,192 @@ mod tests {
         assert_eq!(&zeroed[2..], &q[2..], "only the ID may change");
         assert!(with_zero_id(&[0x12]).len() == 1, "short input is left alone");
     }
+}
 
-    #[test]
-    fn expiry_boundary_is_inclusive() {
-        assert!(pause_expired(1000, 1000));
-        assert!(pause_expired(1001, 1000));
-        assert!(!pause_expired(999, 1000));
+/// Tests for the packet policy and for the proxy loop itself, driven over a
+/// Unix datagram socket pair standing in for the TUN fd (one datagram per
+/// read, like a TUN). No network: the proxies here have no upstreams, so a
+/// forwarded query is answered SERVFAIL locally.
+#[cfg(test)]
+mod loop_tests {
+    use super::*;
+    use crate::wire_test_util::make_query;
+    use domain::base::iana::Rcode;
+    use std::os::fd::AsRawFd;
+    use std::os::unix::net::UnixDatagram;
+
+    fn udp_packet(payload: &[u8], port: u16) -> Vec<u8> {
+        let mut packet = Vec::new();
+        etherparse::PacketBuilder::ipv4([10, 0, 0, 2], [10, 0, 0, 1], 64)
+            .udp(33333, port)
+            .write(&mut packet, payload)
+            .unwrap();
+        packet
     }
 
-    fn trie_from(pauses: &[(&str, i64)]) -> Trie<Vec<u8>, i64> {
-        let map: HashMap<String, i64> = pauses.iter().map(|(d, e)| (d.to_string(), *e)).collect();
-        pauses_trie(map)
+    fn rcode_of(packet: &[u8]) -> Rcode {
+        let sliced = SlicedPacket::from_ip(packet).expect("valid IP packet");
+        match sliced.transport.as_ref() {
+            Some(TransportSlice::Udp(udp)) => {
+                domain::base::message::Message::from_slice(udp.payload())
+                    .unwrap()
+                    .header()
+                    .rcode()
+            }
+            _ => panic!("expected a UDP response"),
+        }
     }
 
-    fn key(domain: &str) -> Vec<u8> {
-        domain_to_wire_format(domain).unwrap()
+    fn blocking(domains: &[&str]) -> Rules {
+        crate::rules::tests::rules(domains, &[], &[])
     }
 
-    #[test]
-    fn active_pause_is_not_expired() {
-        let trie = trie_from(&[("example.com", now_epoch_ms() + 60_000)]);
-        assert!(!pause_lazily_expired(&trie, &key("example.com")));
-    }
-
-    #[test]
-    fn expired_pause_is_expired() {
-        let trie = trie_from(&[("example.com", now_epoch_ms() - 1)]);
-        assert!(pause_lazily_expired(&trie, &key("example.com")));
-    }
-
-    #[test]
-    fn indefinite_pause_never_expires() {
-        let trie = trie_from(&[("example.com", i64::MAX)]);
-        assert!(!pause_lazily_expired(&trie, &key("example.com")));
-    }
-
-    #[test]
-    fn expired_pause_covers_subdomains() {
-        let trie = trie_from(&[("example.com", now_epoch_ms() - 1)]);
-        assert!(pause_lazily_expired(&trie, &key("sub.example.com")));
-    }
-
-    #[test]
-    fn active_pause_covers_subdomains() {
-        let trie = trie_from(&[("example.com", now_epoch_ms() + 60_000)]);
-        assert!(!pause_lazily_expired(&trie, &key("sub.example.com")));
-    }
-
-    #[test]
-    fn unpaused_domain_is_untouched() {
-        let trie = trie_from(&[("example.com", now_epoch_ms() - 1)]);
-        assert!(!pause_lazily_expired(&trie, &key("other.com")));
+    /// Rules as the Android side builds them: through a builder.
+    fn shared_rules(domains: &[&str]) -> Arc<FilterRules> {
+        let builder = BlocklistBuilder::new();
+        builder.add(domains.iter().map(|d| d.to_string()).collect());
+        let rules = FilterRules::new();
+        rules.set_blocklist(builder);
+        rules
     }
 
     #[test]
-    fn empty_pause_set_never_blocks() {
-        let trie = trie_from(&[]);
-        assert!(!pause_lazily_expired(&trie, &key("example.com")));
+    fn blocked_query_is_answered_nxdomain() {
+        let rules = blocking(&["example.com"]);
+        let pkt = udp_packet(&make_query("ads.example.com"), 53);
+        match classify_packet(&pkt, &rules) {
+            PacketAction::Respond(resp) => assert_eq!(rcode_of(&resp), Rcode::NXDOMAIN),
+            other => panic!("expected Respond, got {other:?}"),
+        }
     }
 
     #[test]
-    fn invalid_domains_are_skipped_when_building_the_trie() {
-        // A 64-byte label exceeds the DNS label limit and must be dropped,
-        // not panic.
-        let long_label = "a".repeat(64);
-        let map: HashMap<String, i64> = [(format!("{long_label}.com"), now_epoch_ms() - 1)]
-            .into_iter()
-            .collect();
-        let trie = pauses_trie(map);
-        assert!(!pause_lazily_expired(&trie, &key("example.com")));
+    fn allowed_query_is_forwarded_unchanged() {
+        let rules = blocking(&["example.com"]);
+        let query = make_query("other.com");
+        let pkt = udp_packet(&query, 53);
+        match classify_packet(&pkt, &rules) {
+            PacketAction::Forward(payload) => assert_eq!(payload, query),
+            other => panic!("expected Forward, got {other:?}"),
+        }
     }
 
     #[test]
-    fn pauses_trie_uses_lowercase_keys() {
-        let map: HashMap<String, i64> = [("EXAMPLE.com".to_string(), now_epoch_ms() - 1)]
-            .into_iter()
-            .collect();
-        let trie = pauses_trie(map);
-        assert!(pause_lazily_expired(&trie, &key("example.com")));
-    }
-
-    fn list(domains: &[&str]) -> Trie<Vec<u8>, ()> {
-        domain_trie(domains.iter().map(|d| d.to_string()).collect())
-    }
-
-    #[test]
-    fn whitelist_overrides_identical_block() {
-        let block = list(&["example.com"]);
-        let allow = list(&["example.com"]);
-        let pauses = trie_from(&[]);
-        assert!(!should_block(&block, &allow, &pauses, &key("example.com")));
-        assert!(!should_block(&block, &allow, &pauses, &key("www.example.com")));
+    fn non_dns_and_garbage_are_dropped() {
+        let rules = blocking(&["example.com"]);
+        let not_port_53 = udp_packet(&make_query("example.com"), 5353);
+        let not_dns = udp_packet(&[1, 2, 3], 53);
+        for pkt in [&not_port_53[..], &not_dns[..], &[0u8; 4][..], &[][..]] {
+            assert!(matches!(
+                classify_packet(pkt, &rules),
+                PacketAction::Drop
+            ));
+        }
     }
 
     #[test]
-    fn whitelisted_parent_overrides_blocked_subdomain() {
-        // Blocklists often list "www.example.com" separately; whitelisting
-        // the bare domain (what DomainInputParser produces) must cover it.
-        let block = list(&["www.example.com", "cdn.example.com"]);
-        let allow = list(&["example.com"]);
-        let pauses = trie_from(&[]);
-        assert!(!should_block(&block, &allow, &pauses, &key("www.example.com")));
-        assert!(!should_block(&block, &allow, &pauses, &key("cdn.example.com")));
+    fn tcp_is_answered_with_a_rst() {
+        let rules = blocking(&[]);
+        let mut pkt = Vec::new();
+        etherparse::PacketBuilder::ipv4([10, 0, 0, 2], [10, 0, 0, 1], 64)
+            .tcp(40000, 53, 1, 1024)
+            .syn()
+            .write(&mut pkt, &[])
+            .unwrap();
+        match classify_packet(&pkt, &rules) {
+            PacketAction::Respond(resp) => {
+                let sliced = SlicedPacket::from_ip(&resp).unwrap();
+                match sliced.transport.as_ref() {
+                    Some(TransportSlice::Tcp(tcp)) => assert!(tcp.rst()),
+                    _ => panic!("expected a TCP response"),
+                }
+            }
+            other => panic!("expected Respond, got {other:?}"),
+        }
+    }
+
+    /// A proxy with no upstreams on one end of a socket pair; the test
+    /// plays the device on the other end.
+    fn fake_tun() -> (UnixDatagram, UnixDatagram, Arc<DnsProxy>) {
+        let (device, tun) = UnixDatagram::pair().unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let proxy = DnsProxy::new(
+            tun.as_raw_fd(),
+            None,
+            None,
+            String::new(),
+            Vec::new(),
+            shared_rules(&["example.com"]),
+        );
+        (device, tun, proxy)
+    }
+
+    fn ask(device: &UnixDatagram, domain: &str) -> Rcode {
+        device.send(&udp_packet(&make_query(domain), 53)).unwrap();
+        let mut buf = [0u8; 2048];
+        let n = device.recv(&mut buf).expect("no response from the proxy");
+        rcode_of(&buf[..n])
+    }
+
+    const WAIT_MS: u64 = 5_000;
+
+    #[test]
+    fn loop_answers_blocked_and_unforwardable_queries() {
+        let (device, _tun, proxy) = fake_tun();
+        proxy.start();
+        assert_eq!(ask(&device, "ads.example.com"), Rcode::NXDOMAIN);
+        // Not blocked, but there is no upstream to forward to.
+        assert_eq!(ask(&device, "other.com"), Rcode::SERVFAIL);
+        assert!(proxy.stop_and_wait(WAIT_MS));
     }
 
     #[test]
-    fn whitelisted_subdomain_overrides_blocked_parent() {
-        let block = list(&["example.com"]);
-        let allow = list(&["docs.example.com"]);
-        let pauses = trie_from(&[]);
-        assert!(!should_block(&block, &allow, &pauses, &key("docs.example.com")));
-        assert!(should_block(&block, &allow, &pauses, &key("ads.example.com")));
-        assert!(should_block(&block, &allow, &pauses, &key("example.com")));
+    fn stop_and_wait_without_a_running_task_returns_immediately() {
+        let (_device, _tun, proxy) = fake_tun();
+        assert!(proxy.stop_and_wait(WAIT_MS));
+        proxy.start();
+        assert!(proxy.stop_and_wait(WAIT_MS));
+        // Already stopped: nothing left to wait for.
+        assert!(proxy.stop_and_wait(0));
     }
 
+    /// The point of stop_and_wait: once it returns true the fd is free, so
+    /// a new proxy on the same fd works at once (this is what the Android
+    /// side does on a network change).
     #[test]
-    fn whitelist_overrides_expired_pause() {
-        let block = list(&[]);
-        let allow = list(&["example.com"]);
-        let pauses = trie_from(&[("example.com", now_epoch_ms() - 1)]);
-        assert!(!should_block(&block, &allow, &pauses, &key("example.com")));
-    }
+    fn fd_is_reusable_as_soon_as_stop_and_wait_returns() {
+        let (device, tun, first) = fake_tun();
+        first.start();
+        assert_eq!(ask(&device, "example.com"), Rcode::NXDOMAIN);
 
-    #[test]
-    fn whitelist_does_not_leak_to_lookalike_domains() {
-        let block = list(&["example.com", "notexample.com"]);
-        let allow = list(&["example.com"]);
-        let pauses = trie_from(&[]);
-        assert!(should_block(&block, &allow, &pauses, &key("notexample.com")));
-    }
+        for _ in 0..20 {
+            assert!(first.stop_and_wait(WAIT_MS));
+            // No reactor registration may be left on the fd.
+            let registered = {
+                let _guard = get_runtime().enter();
+                // SAFETY: `tun` is open and outlives this registration.
+                unsafe { AsyncFd::register(tun.as_raw_fd()) }
+            };
+            assert!(registered.is_ok(), "fd still registered after stop_and_wait");
+            drop(registered);
+            first.start();
+            assert_eq!(ask(&device, "example.com"), Rcode::NXDOMAIN);
+        }
+        assert!(first.stop_and_wait(WAIT_MS));
 
-    #[test]
-    fn blocking_unaffected_without_whitelist() {
-        let block = list(&["example.com"]);
-        let allow = list(&[]);
-        let pauses = trie_from(&[]);
-        assert!(should_block(&block, &allow, &pauses, &key("sub.example.com")));
-        assert!(!should_block(&block, &allow, &pauses, &key("other.com")));
+        let second = DnsProxy::new(
+            tun.as_raw_fd(),
+            None,
+            None,
+            String::new(),
+            Vec::new(),
+            shared_rules(&["blocked.test"]),
+        );
+        second.start();
+        assert_eq!(ask(&device, "blocked.test"), Rcode::NXDOMAIN);
+        assert!(second.stop_and_wait(WAIT_MS));
     }
 }
 

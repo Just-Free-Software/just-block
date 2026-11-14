@@ -5,7 +5,6 @@ import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import fyi.justfreesoftware.justblock.ServiceLocator
-import fyi.justfreesoftware.justblock.core.UpstreamConfig
 import fyi.justfreesoftware.justblock.core.MyVpnService
 import fyi.justfreesoftware.justblock.data.BlocklistRepository
 import fyi.justfreesoftware.justblock.data.BlocklistState
@@ -19,9 +18,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -36,7 +35,7 @@ import kotlinx.coroutines.launch
  */
 class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val prefs      = UserPreferences(application)
+    private val prefs = UserPreferences(application)
     private val repository get() = ServiceLocator.blocklistRepository
 
     /** Active auto-resume coroutines, keyed by domain. */
@@ -84,9 +83,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
      */
     val isVpnEnabled: StateFlow<Boolean> = prefs.isVpnEnabledFlow
         .stateIn(
-            scope         = viewModelScope,
-            started       = SharingStarted.WhileSubscribed(5_000),
-            initialValue  = false,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = false
         )
 
     // ── Blocking enabled toggle ───────────────────────────────────────────────────
@@ -109,7 +108,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
             val serviceIntent = Intent(getApplication(), MyVpnService::class.java).apply {
                 this.action = action
             }
-            if (enabled && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            if (enabled) {
                 getApplication<Application>().startForegroundService(serviceIntent)
             } else {
                 getApplication<Application>().startService(serviceIntent)
@@ -124,9 +123,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
      */
     val isBlockingEnabled: StateFlow<Boolean> = prefs.isBlockingEnabledFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = true,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = true
         )
 
     fun setBlockingEnabled(enabled: Boolean) {
@@ -148,9 +147,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     val isStartOnBoot: StateFlow<Boolean> = prefs.isStartOnBootFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = false,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = false
         )
 
     fun setStartOnBoot(enabled: Boolean) {
@@ -158,17 +157,11 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     val themeMode: StateFlow<ThemeMode> = prefs.themeModeFlow
-        .map { 
-            try {
-                ThemeMode.valueOf(it)
-            } catch (e: IllegalArgumentException) {
-                ThemeMode.Dark
-            }
-        }
+        .map { saved -> ThemeMode.entries.firstOrNull { it.name == saved } ?: ThemeMode.Dark }
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = ThemeMode.Dark,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = ThemeMode.Dark
         )
 
     fun setThemeMode(mode: ThemeMode) {
@@ -177,75 +170,13 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     val hasSeenWelcome: StateFlow<Boolean?> = prefs.hasSeenWelcomeFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = null,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = null
         )
 
     fun setHasSeenWelcome(seen: Boolean) {
         viewModelScope.launch { prefs.setHasSeenWelcome(seen) }
-    }
-
-    // -------------------------------------------------------------------------
-    // Upstream DNS config
-    // -------------------------------------------------------------------------
-
-    /**
-     * The currently saved upstream resolver.
-     * The UI uses this to show which resolver is active and pre-populate the
-     * settings screen. [MyVpnService] reads this independently via DataStore
-     * on start — the ViewModel doesn't push it to the service directly.
-     */
-    val upstreamConfig: StateFlow<UpstreamConfig> = prefs.upstreamConfigFlow
-        .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = UserPreferences.DEFAULT_UPSTREAM,
-        )
-
-    /**
-     * Saves a new upstream resolver.
-     *
-     * If the VPN is currently running, a restart is required for the change to
-     * take effect. The UI should surface this via [pendingRestartReason].
-     */
-    fun setUpstreamConfig(config: UpstreamConfig) {
-        viewModelScope.launch {
-            prefs.setUpstreamConfig(config)
-            if (isVpnEnabled.value) {
-                _pendingRestartReason.update { PendingRestartReason.UPSTREAM_CHANGED }
-            }
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Pending restart banner
-    // -------------------------------------------------------------------------
-
-    /**
-     * Set when a settings change requires a VPN restart to take effect.
-     * The UI should show a non-intrusive banner ("Restart VPN to apply changes")
-     * while this is non-null, and clear it once the user restarts or dismisses.
-     */
-    enum class PendingRestartReason { UPSTREAM_CHANGED }
-
-    private val _pendingRestartReason = MutableStateFlow<PendingRestartReason?>(null)
-    val pendingRestartReason: StateFlow<PendingRestartReason?> = _pendingRestartReason.asStateFlow()
-
-    fun dismissRestartBanner() {
-        _pendingRestartReason.update { null }
-    }
-
-    /**
-     * Restarts the VPN to apply pending settings changes, then clears the banner.
-     */
-    fun restartVpn() {
-        viewModelScope.launch {
-            setVpnEnabled(false)
-            delay(500) // Give the service time to tear down the TUN interface
-            setVpnEnabled(true)
-            _pendingRestartReason.update { null }
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -254,9 +185,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     val manualBlockedDomains: StateFlow<Set<String>> = prefs.manualBlockedDomainsFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = emptySet(),
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptySet()
         )
 
     /**
@@ -321,10 +252,11 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     fun pauseBlockedDomain(domain: String, durationMs: Long?) {
         val cleaned = domain.trim().lowercase()
         if (cleaned.contains("|")) return
-        val expiresAt = if (durationMs != null)
+        val expiresAt = if (durationMs != null) {
             System.currentTimeMillis() + durationMs
-        else
+        } else {
             Long.MAX_VALUE
+        }
 
         // Update live filter
         ServiceLocator.dnsFilter.pauseDomain(cleaned, expiresAt)
@@ -380,9 +312,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     val whitelistedDomains: StateFlow<Set<String>> = prefs.whitelistedDomainsFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = emptySet(),
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptySet()
         )
 
     fun addWhitelistedDomain(domain: String) {
@@ -431,9 +363,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
      */
     val bypassedApps: StateFlow<Set<String>> = prefs.bypassedAppsFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = UserPreferences.DEFAULT_BYPASSED_APPS,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = UserPreferences.DEFAULT_BYPASSED_APPS
         )
 
     /**
@@ -471,11 +403,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
                 val serviceIntent = Intent(getApplication(), MyVpnService::class.java).apply {
                     action = MyVpnService.ACTION_FLUSH_DNS_CACHE
                 }
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    getApplication<Application>().startForegroundService(serviceIntent)
-                } else {
-                    getApplication<Application>().startService(serviceIntent)
-                }
+                getApplication<Application>().startForegroundService(serviceIntent)
             }
         }
     }
@@ -486,9 +414,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     val customSourceUrls: StateFlow<Set<String>> = prefs.customSourceUrlsFlow
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = emptySet(),
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptySet()
         )
 
     fun addCustomSourceUrl(url: String) {
@@ -522,12 +450,10 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     /** Sources that failed in the last refresh, keyed by URL. */
     val sourceIssues: StateFlow<Map<String, SourceIssue>> = repository.sourceIssues
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = emptyMap(),
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyMap()
         )
-
-
 
     // -------------------------------------------------------------------------
     // Blocklist refresh
@@ -546,15 +472,15 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
      */
     val blocklistState: StateFlow<BlocklistState> = repository.state
         .stateIn(
-            scope        = viewModelScope,
-            started      = SharingStarted.WhileSubscribed(5_000),
-            initialValue = BlocklistState.Idle,
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = BlocklistState.Idle
         )
 
     /**
-     * Triggers a fresh download and parse of all enabled blocklists via
-     * [BlocklistRepository.loadAndCompileBlocklists]. Pulls the latest custom
-     * source URLs from [UserPreferences] and merges them with the built-in lists.
+     * Triggers a fresh download and parse of all blocklist sources via
+     * [BlocklistRepository.loadAndCompileBlocklists], which reads the latest
+     * source URLs from [UserPreferences].
      * Ignores the call if a refresh is already in progress.
      */
     fun refreshBlocklists() {
