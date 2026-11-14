@@ -27,7 +27,8 @@ private val DarkColorScheme = darkColorScheme(
     surface = DarkSurface,
     onSurface = DarkOnSurface,
     surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = DarkOnSurfaceVariant
+    onSurfaceVariant = DarkOnSurfaceVariant,
+    surfaceContainer = DarkSurfaceContainer
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -48,7 +49,8 @@ private val LightColorScheme = lightColorScheme(
     surface = LightSurface,
     onSurface = LightOnSurface,
     surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightOnSurfaceVariant
+    onSurfaceVariant = LightOnSurfaceVariant,
+    surfaceContainer = LightSurfaceContainer
 )
 
 enum class ThemeMode {
@@ -57,13 +59,17 @@ enum class ThemeMode {
     Dynamic
 }
 
+/** Whether this mode currently renders dark. [ThemeMode.Dynamic] follows the system. */
+@Composable
+fun ThemeMode.isDark(): Boolean = when (this) {
+    ThemeMode.Light -> false
+    ThemeMode.Dark -> true
+    ThemeMode.Dynamic -> isSystemInDarkTheme()
+}
+
 @Composable
 fun JustBlockTheme(themeMode: ThemeMode = ThemeMode.Dynamic, content: @Composable () -> Unit) {
-    val darkTheme = when (themeMode) {
-        ThemeMode.Light -> false
-        ThemeMode.Dark -> true
-        ThemeMode.Dynamic -> isSystemInDarkTheme()
-    }
+    val darkTheme = themeMode.isDark()
 
     val dynamicColor = themeMode == ThemeMode.Dynamic
     val colorScheme = when {
