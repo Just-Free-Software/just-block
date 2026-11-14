@@ -85,7 +85,7 @@
     <string name="source_problem_download_failed">the download failed. Check your connection.</string>
     <string name="source_problem_not_a_blocklist">this link isn\'t a blocklist. Link to the raw text file.</string>
     <string name="source_problem_too_large">this blocklist is too large.</string>
-    <!-- %1$s is the domain limit, already formatted for the locale (e.g. "2,000,000") -->
+    <!-- %1$s is the domain limit, already formatted for the locale (e.g. "3,000,000") -->
     <string name="source_problem_over_total_limit">your blocklists together are over the %1$s domain limit.</string>
 
     <!-- Whitelist screen -->

@@ -163,7 +163,7 @@ class BlocklistFetcher(
         const val MAX_LINE_LENGTH = 1024
 
         // Also the cap on all sources combined, see BlocklistRepository.
-        const val MAX_DOMAINS = 2_000_000
+        const val MAX_DOMAINS = 3_000_000
     }
 
     private val parser: FilterParser = FilterParser()

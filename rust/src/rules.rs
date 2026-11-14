@@ -9,7 +9,7 @@
 //!
 //! The price is that two different names with the same hash cannot be told
 //! apart, so a collision would treat an unrelated domain as listed. With
-//! 2,000,000 entries the chance is about 1 in 10^13 per probe.
+//! 3,000,000 entries the chance is about 1 in 6 * 10^12 per probe.
 //!
 //! Every entry is a wildcard: a query matches an entry when the entry is
 //! the queried name or one of its parent domains. A lookup walks the
