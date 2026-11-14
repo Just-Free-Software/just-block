@@ -23,7 +23,6 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 webpki-roots = "1.0"
 tokio-util = { version = "0.7", features = ["rt"] }
 etherparse = "0.21.0"
-radix_trie = "0.3"
 libc = "0.2"
 domain = "0.12"
 h3 = "0.0.8"

@@ -10,9 +10,9 @@ Just Block uses Android's `VpnService` API to establish a local TUN interface. I
 
 1. **Traffic Interception:** The TUN file descriptor is passed to the Rust `DnsProxy`.
 2. **DNS Extraction:** The Rust proxy uses `etherparse` to parse IP/UDP packets and extract raw DNS queries.
-3. **Filtering:** Queries are evaluated against a compiled Radix Trie in Rust containing blocked domains. Temporarily paused domains live in a second trie in Rust; their expiry is enforced lazily at query time, so a pause ends (and blocking resumes) even when the app's UI process — and its countdown timers — are gone. Whitelisted domains live in a third trie that is checked first and overrides both.
+3. **Filtering:** Queries are evaluated in Rust against the blocklist, held as a set of 64-bit hashes (one per blocked domain) to keep memory low with large lists. Rust holds the only copy; the Android side streams lists in and keeps none. Temporarily paused domains live in a second table in Rust; their expiry is enforced lazily at query time, so a pause ends (and blocking resumes) even when the app's UI process — and its countdown timers — are gone. Whitelisted domains live in a third table that is checked first and overrides both.
 4. **Resolution or Blocking:**
-   - **Blocked:** If the domain matches the trie, the proxy immediately responds with a null/unreachable response, preventing the ad/tracker from loading.
+   - **Blocked:** If the domain or one of its parent domains is on the blocklist, the proxy immediately responds with a null/unreachable response, preventing the ad/tracker from loading.
    - **Allowed:** If the domain is safe, the query is forwarded to an upstream DNS resolver using DNS-over-QUIC (DoQ) powered by the `quinn` crate in Rust. If the DoQ upstream fails, the query falls back to Cloudflare and then Google over DNS-over-HTTP/3 (DoH3).
 
 ### Blocklist format
@@ -29,8 +29,8 @@ Every blocklist entry is treated as a **wildcard**: an entry `example.com` block
 ### Core (`just_block_rust` & `fyi.justfreesoftware.justblock.core`)
 The VPN orchestration and packet processing happens across Kotlin and Rust boundaries.
 - `MyVpnService.kt`: The `VpnService` implementation. It manages the TUN interface, handles start/stop intents, and orchestrates the VPN lifecycle.
-- `lib.rs` / `quic.rs` / `doh3.rs` / `proxy.rs`: The Rust backend doing asynchronous packet reading/writing (via `tokio`), packet parsing (`etherparse`), DoQ and DoH3 connections (`quinn`, `h3`), and blocklist enforcement (`radix_trie`).
-- `DnsFilter.kt`: Manages the state of the blocklist in Kotlin (including paused/resumed domains) and syncs it with the Rust proxy.
+- `lib.rs` / `rules.rs` / `quic.rs` / `doh3.rs` / `proxy.rs`: The Rust backend doing asynchronous packet reading/writing (via `tokio`), packet parsing (`etherparse`), DoQ and DoH3 connections (`quinn`, `h3`), and blocklist enforcement.
+- `DnsFilter.kt`: The app's handle on the filtering rules held in Rust. Streams blocklists across, and keeps only the small user-edited lists (whitelist, paused domains) on the Kotlin side.
 
 ### Data (`fyi.justfreesoftware.justblock.data`)
 Manages blocklists and user preferences.

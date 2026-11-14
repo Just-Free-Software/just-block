@@ -8,10 +8,11 @@ use domain::dep::octseq::octets::Octets;
 use domain::rdata::Soa;
 use etherparse::{PacketBuilder, SlicedPacket, TransportSlice};
 
-/// Parses a DNS query payload and derives the trie key for blocklist lookups.
+/// Parses a DNS query payload and derives the lookup key for the block, allow
+/// and pause lists.
 ///
 /// Returns the lowercased, label-reversed qname (each label's length byte
-/// kept intact, no root byte) for ancestor lookups in the blocklist trie
+/// kept intact, no root byte) for ancestor lookups
 /// — e.g. `ads.example.com` → `\x03com\x07example\x03ads`.
 ///
 /// Returns `None` for malformed packets, including packets with zero or
@@ -36,7 +37,7 @@ pub fn parse_query(payload: &[u8]) -> Option<Vec<u8>> {
     wire.push(0);
     wire.make_ascii_lowercase();
 
-    // Trie key: labels in reverse order, each label's bytes (incl. length
+    // Lookup key: labels in reverse order, each label's bytes (incl. length
     // byte) kept intact, no root byte.
     let mut ranges: Vec<(usize, usize)> = Vec::new();
     let mut idx = 0;
@@ -298,23 +299,21 @@ mod wire_tests {
 
     #[test]
     fn blocked_subdomain_of_blocked_parent_is_blocked() {
-        // Insert "example.com" into a trie the way update_blocklist does,
-        // then check that parse_query("ads.example.com") hits it.
-        use radix_trie::Trie;
-        let mut trie = Trie::new();
-        trie.insert(crate::domain_to_wire_format("example.com").unwrap(), ());
+        // A list entry's key (domain_to_wire_format) must be a prefix of
+        // the key parse_query derives for a subdomain of it.
+        let entry = crate::domain_to_wire_format("example.com").unwrap();
         let q = crate::wire_test_util::make_query("ads.example.com");
-        let trie_key = parse_query(&q).unwrap();
-        assert!(trie.get_ancestor_value(&trie_key).is_some());
+        let key = parse_query(&q).unwrap();
+        assert!(key.starts_with(&entry));
+        let rules = crate::rules::tests::rules(&["example.com"], &[], &[]);
+        assert!(rules.should_block(&key));
     }
 
     #[test]
     fn unblocked_subdomain_does_not_match() {
-        use radix_trie::Trie;
-        let mut trie = Trie::new();
-        trie.insert(crate::domain_to_wire_format("example.com").unwrap(), ());
         let q = crate::wire_test_util::make_query("notexample.com");
-        let trie_key = parse_query(&q).unwrap();
-        assert!(trie.get_ancestor_value(&trie_key).is_none());
+        let key = parse_query(&q).unwrap();
+        let rules = crate::rules::tests::rules(&["example.com"], &[], &[]);
+        assert!(!rules.should_block(&key));
     }
 }

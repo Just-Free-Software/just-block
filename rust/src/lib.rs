@@ -4,6 +4,7 @@ mod proxy;
 
 mod doh3;
 mod quic;
+mod rules;
 #[cfg(test)]
 mod wire_test_util;
 
@@ -14,7 +15,7 @@ use proxy::{
     parse_query,
 };
 use quic::{DoqClient, QuicEndpoint};
-use radix_trie::Trie;
+use rules::{DomainSet, Rules};
 use std::collections::HashMap;
 use std::os::fd::RawFd;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -76,9 +77,7 @@ pub struct Doh3Backup {
 pub struct DnsProxy {
     tun_fd: i32,
     quic_fds: Vec<i32>,
-    blocklist: Arc<RwLock<Trie<Vec<u8>, ()>>>,
-    allowlist: Arc<RwLock<Trie<Vec<u8>, ()>>>,
-    pauses: Arc<RwLock<Trie<Vec<u8>, i64>>>,
+    rules: Arc<FilterRules>,
     run_slot: Arc<Mutex<RunSlot>>,
     upstreams: Vec<Arc<Upstream>>,
 }
@@ -92,6 +91,7 @@ impl DnsProxy {
         upstream_v6: Option<String>,
         sni_hostname: String,
         doh3_backups: Vec<Doh3Backup>,
+        rules: Arc<FilterRules>,
     ) -> Arc<Self> {
         let _guard = get_runtime().enter();
         let upstream_v4 = upstream_v4.and_then(|s| match s.parse::<std::net::IpAddr>() {
@@ -181,9 +181,7 @@ impl DnsProxy {
         Arc::new(Self {
             tun_fd,
             quic_fds,
-            blocklist: Arc::new(RwLock::new(Trie::new())),
-            allowlist: Arc::new(RwLock::new(Trie::new())),
-            pauses: Arc::new(RwLock::new(Trie::new())),
+            rules,
             run_slot: Arc::new(Mutex::new(RunSlot::default())),
             upstreams,
         })
@@ -260,14 +258,12 @@ impl DnsProxy {
         };
 
         let tun_fd = self.tun_fd;
-        let blocklist = self.blocklist.clone();
-        let allowlist = self.allowlist.clone();
-        let pauses = self.pauses.clone();
+        let rules = self.rules.clone();
         let upstreams = self.upstreams.clone();
         let run_slot = self.run_slot.clone();
 
         get_runtime().spawn(async move {
-            run_proxy(tun_fd, upstreams, blocklist, allowlist, pauses, cancel_token).await;
+            run_proxy(tun_fd, upstreams, rules, cancel_token).await;
             // Clear the slot on exit (both natural exit and cancellation) so
             // a subsequent start() works. The generation check ensures a
             // stale task never clears a newer run's token.
@@ -282,42 +278,6 @@ impl DnsProxy {
             drop(exit_tx);
         });
     }
-
-    pub fn update_blocklist(&self, domains: Vec<String>) {
-        #[cfg_attr(
-            not(all(target_os = "android", feature = "dns-trace")),
-            allow(unused_variables)
-        )]
-        let requested = domains.len();
-        let trie = domain_trie(domains);
-        log_trace!(&format!(
-            "update_blocklist: {} entries requested, {} inserted",
-            requested,
-            // Fully qualified: a `use` of the trait would be unused (and
-            // warn) in builds where log_trace! compiles to nothing.
-            radix_trie::TrieCommon::len(&trie)
-        ));
-        *self.blocklist.write().unwrap_or_else(|e| e.into_inner()) = trie;
-    }
-
-    /// Replaces the allowlist (user-whitelisted domains). An allowlisted
-    /// domain — and every subdomain of it — is always forwarded, overriding
-    /// both the blocklist and expired pauses.
-    pub fn update_allowlist(&self, domains: Vec<String>) {
-        log_trace!(&format!("update_allowlist: {} entries", domains.len()));
-        let trie = domain_trie(domains);
-        *self.allowlist.write().unwrap_or_else(|e| e.into_inner()) = trie;
-    }
-
-    /// Replaces the pause set. `pauses` maps lowercased domains to epoch-millis
-    /// expiry times; `i64::MAX` means an indefinite pause. Pauses are enforced
-    /// lazily at query time (see [pause_expired]), so they keep working even
-    /// when the Android UI process that owns the countdown timer is gone.
-    pub fn update_pauses(&self, pauses: HashMap<String, i64>) {
-        log_trace!(&format!("update_pauses: {} entries", pauses.len()));
-        let trie = pauses_trie(pauses);
-        *self.pauses.write().unwrap_or_else(|e| e.into_inner()) = trie;
-    }
 }
 
 impl DnsProxy {
@@ -326,17 +286,154 @@ impl DnsProxy {
     }
 }
 
-/// Convert a domain string to a reversed, lowercased wire-format key for the trie.
+/// The filtering rules: blocklist, allowlist, pauses and the blocking
+/// switch. One instance lives for the whole app process and is shared by
+/// every [DnsProxy] in turn, so rebuilding the tunnel or reconnecting
+/// upstream never needs the lists pushed again. It holds the only copy of
+/// the blocklist; the Android side keeps none.
+///
+/// Changes take effect on the next query. See [rules] for the matching
+/// rules.
+#[derive(uniffi::Object, Default)]
+pub struct FilterRules {
+    inner: RwLock<Rules>,
+}
+
+#[uniffi::export]
+impl FilterRules {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    /// Replaces the blocklist with what `builder` has collected. The
+    /// builder is left empty.
+    pub fn set_blocklist(&self, builder: Arc<BlocklistBuilder>) {
+        let mut blocklist = std::mem::take(&mut *builder.lock());
+        blocklist.shrink_to_fit();
+        log_trace!(&format!("set_blocklist: {} entries", blocklist.len()));
+        self.write().blocklist = blocklist;
+    }
+
+    /// Adds one domain to the blocklist.
+    pub fn add_blocked(&self, domain: String) {
+        self.write().blocklist.insert(&domain);
+    }
+
+    /// Removes one entry from the blocklist. Only that exact entry goes:
+    /// the domain stays blocked if a parent domain is listed.
+    pub fn remove_blocked(&self, domain: String) {
+        self.write().blocklist.remove(&domain);
+    }
+
+    /// Replaces the allowlist (user-whitelisted domains). An allowlisted
+    /// domain, and every subdomain of it, is always forwarded, overriding
+    /// both the blocklist and expired pauses.
+    pub fn set_allowlist(&self, domains: Vec<String>) {
+        log_trace!(&format!("set_allowlist: {} entries", domains.len()));
+        self.write().allowlist = domains.into_iter().collect();
+    }
+
+    /// Replaces the pause set. `pauses` maps domains to epoch-millis expiry
+    /// times; `i64::MAX` means an indefinite pause. A paused domain's own
+    /// blocklist entry is ignored, and once the pause expires the domain is
+    /// blocked again. Expiry is enforced lazily at query time, so pauses
+    /// keep working even when the Android UI process that owns the
+    /// countdown timer is gone.
+    pub fn set_pauses(&self, pauses: HashMap<String, i64>) {
+        log_trace!(&format!("set_pauses: {} entries", pauses.len()));
+        self.write().set_pauses(pauses);
+    }
+
+    /// With blocking disabled nothing is blocked and every query is
+    /// forwarded. The lists are kept.
+    pub fn set_blocking_enabled(&self, enabled: bool) {
+        self.write().blocking_enabled = enabled;
+    }
+
+    /// Empties the blocklist, allowlist and pauses, freeing their memory.
+    pub fn clear(&self) {
+        self.write().clear();
+    }
+}
+
+impl FilterRules {
+    fn read(&self) -> std::sync::RwLockReadGuard<'_, Rules> {
+        self.inner.read().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn write(&self) -> std::sync::RwLockWriteGuard<'_, Rules> {
+        self.inner.write().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+/// What [BlocklistBuilder::add_file] did with a file.
+#[derive(uniffi::Enum, Debug, PartialEq, Eq)]
+pub enum AddFileOutcome {
+    /// Its domains are in the builder.
+    Added,
+    /// Left out whole: it would have taken the builder past the limit.
+    OverLimit,
+    /// Missing or unreadable. Domains read before a failure may be in.
+    Unreadable,
+}
+
+/// Collects a new blocklist a batch at a time, so the Android side can
+/// stream domains across without ever holding the whole list. Hand it to
+/// [FilterRules::set_blocklist] when done.
+#[derive(uniffi::Object, Default)]
+pub struct BlocklistBuilder {
+    domains: Mutex<DomainSet>,
+}
+
+#[uniffi::export]
+impl BlocklistBuilder {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    /// Adds a batch of domains. Duplicates and invalid names are dropped.
+    pub fn add(&self, domains: Vec<String>) {
+        self.lock().extend(domains);
+    }
+
+    /// Adds every domain in the file at `path` (one per line, as the
+    /// Android side's blocklist cache stores them), unless the file's line
+    /// count would take the builder past `limit` domains. Reading the file
+    /// here is far cheaper than passing each domain across as a string.
+    pub fn add_file(&self, path: String, limit: u64) -> AddFileOutcome {
+        let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+        match self.lock().extend_from_file(std::path::Path::new(&path), limit) {
+            Ok(true) => AddFileOutcome::Added,
+            Ok(false) => AddFileOutcome::OverLimit,
+            Err(_) => AddFileOutcome::Unreadable,
+        }
+    }
+
+    /// Distinct domains collected so far.
+    pub fn count(&self) -> u64 {
+        self.lock().len() as u64
+    }
+}
+
+impl BlocklistBuilder {
+    fn lock(&self) -> std::sync::MutexGuard<'_, DomainSet> {
+        self.domains.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+/// Convert a domain string to a reversed, lowercased wire-format key.
 /// "example.com" → \x03com\x07example  (no trailing \x00)
 ///
-/// Reversed so that `get_ancestor_value` can match subdomains:
-/// blocking "example.com" (key: \x03com\x07example) will match
-/// a query for "ads.example.com" (key: \x03com\x07example\x03ads)
-/// because the parent key is a byte-prefix of the child key.
+/// Reversed so that a parent domain's key is a prefix of its subdomains'
+/// keys: "example.com" (key: \x03com\x07example) is a prefix of
+/// "ads.example.com" (key: \x03com\x07example\x03ads). Lookups walk
+/// those prefixes; see [rules].
 ///
 /// Returns `None` if any label exceeds the 63-byte DNS label limit or the
 /// name exceeds 255 bytes, so malformed blocklist entries are rejected
-/// rather than silently producing truncated/garbage trie keys.
+/// rather than silently producing truncated/garbage keys.
 pub(crate) fn domain_to_wire_format(domain: &str) -> Option<Vec<u8>> {
     let mut out = Vec::new();
     let parts: Vec<&str> = domain.split('.').filter(|p| !p.is_empty()).collect();
@@ -348,61 +445,6 @@ pub(crate) fn domain_to_wire_format(domain: &str) -> Option<Vec<u8>> {
         out.extend_from_slice(part.to_ascii_lowercase().as_bytes());
     }
     Some(out)
-}
-
-/// Builds a reversed wire-format trie from a domain list, skipping entries
-/// that aren't valid DNS names.
-pub(crate) fn domain_trie(domains: Vec<String>) -> Trie<Vec<u8>, ()> {
-    let mut trie = Trie::new();
-    for domain in domains {
-        if let Some(wire_format) = domain_to_wire_format(&domain) {
-            trie.insert(wire_format, ());
-        }
-    }
-    trie
-}
-
-/// Converts a domain → expiry map into a reversed wire-format trie, using the
-/// same key encoding as the blocklist trie so ancestor matching is identical.
-pub(crate) fn pauses_trie(pauses: HashMap<String, i64>) -> Trie<Vec<u8>, i64> {
-    let mut trie = Trie::new();
-    for (domain, expires_at) in pauses {
-        if let Some(wire_format) = domain_to_wire_format(&domain) {
-            trie.insert(wire_format, expires_at);
-        }
-    }
-    trie
-}
-
-/// Pure expiry predicate: true when a pause lapsed by `now_ms`.
-fn pause_expired(now_ms: i64, expiry: i64) -> bool {
-    now_ms >= expiry
-}
-
-/// Query-path pause check. Ancestor matching mirrors the blocklist trie
-/// (pausing "example.com" covers "sub.example.com"). The clock is only read
-/// when a pause actually covers `trie_key`, so unpause-covered queries pay
-/// nothing beyond the trie lookup.
-fn pause_lazily_expired(pauses: &Trie<Vec<u8>, i64>, trie_key: &[u8]) -> bool {
-    match pauses.get_ancestor_value(trie_key) {
-        Some(&expiry) => pause_expired(now_epoch_ms(), expiry),
-        None => false,
-    }
-}
-
-/// Query-path block decision. The allowlist wins over everything: a
-/// whitelisted domain (or any subdomain of it) is never blocked, even if
-/// it or a parent is on the blocklist or has a lapsed pause.
-fn should_block(
-    blocklist: &Trie<Vec<u8>, ()>,
-    allowlist: &Trie<Vec<u8>, ()>,
-    pauses: &Trie<Vec<u8>, i64>,
-    trie_key: &[u8],
-) -> bool {
-    if allowlist.get_ancestor_value(trie_key).is_some() {
-        return false;
-    }
-    blocklist.get_ancestor_value(trie_key).is_some() || pause_lazily_expired(pauses, trie_key)
 }
 
 fn now_epoch_ms() -> i64 {
@@ -777,9 +819,7 @@ async fn write_tun(fd: &AsyncFd<RawFd>, packet: &[u8]) -> std::io::Result<()> {
 async fn run_proxy(
     tun_fd: i32,
     upstreams: Vec<Arc<Upstream>>,
-    blocklist: Arc<RwLock<Trie<Vec<u8>, ()>>>,
-    allowlist: Arc<RwLock<Trie<Vec<u8>, ()>>>,
-    pauses: Arc<RwLock<Trie<Vec<u8>, i64>>>,
+    rules: Arc<FilterRules>,
     cancel_token: CancellationToken,
 ) {
     log_trace!("run_proxy started");
@@ -885,12 +925,7 @@ async fn run_proxy(
                 }
                 let pkt = &buf[..n as usize];
 
-                let action = classify_packet(
-                    pkt,
-                    &blocklist.read().unwrap_or_else(|e| e.into_inner()),
-                    &allowlist.read().unwrap_or_else(|e| e.into_inner()),
-                    &pauses.read().unwrap_or_else(|e| e.into_inner()),
-                );
+                let action = classify_packet(pkt, &rules.read());
                 match action {
                     PacketAction::Respond(resp) => try_respond(&tx, resp),
                     PacketAction::Forward(payload) => {
@@ -946,9 +981,7 @@ enum PacketAction {
 /// are dropped silently (no ICMP amplification).
 fn classify_packet(
     pkt: &[u8],
-    blocklist: &Trie<Vec<u8>, ()>,
-    allowlist: &Trie<Vec<u8>, ()>,
-    pauses: &Trie<Vec<u8>, i64>,
+    rules: &Rules,
 ) -> PacketAction {
     let Ok(sliced) = SlicedPacket::from_ip(pkt) else {
         return PacketAction::Drop;
@@ -959,10 +992,10 @@ fn classify_packet(
                 return PacketAction::Drop;
             }
             let payload = udp.payload();
-            let Some(trie_key) = parse_query(payload) else {
+            let Some(key) = parse_query(payload) else {
                 return PacketAction::Drop;
             };
-            if should_block(blocklist, allowlist, pauses, &trie_key) {
+            if rules.should_block(&key) {
                 log_trace!(&format!("BLOCKED {} -> NXDOMAIN", qname_str(payload)));
                 local_response(&sliced, payload, LocalAnswer::Nxdomain)
                     .map_or(PacketAction::Drop, PacketAction::Respond)
@@ -1116,144 +1149,6 @@ mod tests {
         assert_eq!(&zeroed[2..], &q[2..], "only the ID may change");
         assert!(with_zero_id(&[0x12]).len() == 1, "short input is left alone");
     }
-
-    #[test]
-    fn expiry_boundary_is_inclusive() {
-        assert!(pause_expired(1000, 1000));
-        assert!(pause_expired(1001, 1000));
-        assert!(!pause_expired(999, 1000));
-    }
-
-    fn trie_from(pauses: &[(&str, i64)]) -> Trie<Vec<u8>, i64> {
-        let map: HashMap<String, i64> = pauses.iter().map(|(d, e)| (d.to_string(), *e)).collect();
-        pauses_trie(map)
-    }
-
-    fn key(domain: &str) -> Vec<u8> {
-        domain_to_wire_format(domain).unwrap()
-    }
-
-    #[test]
-    fn active_pause_is_not_expired() {
-        let trie = trie_from(&[("example.com", now_epoch_ms() + 60_000)]);
-        assert!(!pause_lazily_expired(&trie, &key("example.com")));
-    }
-
-    #[test]
-    fn expired_pause_is_expired() {
-        let trie = trie_from(&[("example.com", now_epoch_ms() - 1)]);
-        assert!(pause_lazily_expired(&trie, &key("example.com")));
-    }
-
-    #[test]
-    fn indefinite_pause_never_expires() {
-        let trie = trie_from(&[("example.com", i64::MAX)]);
-        assert!(!pause_lazily_expired(&trie, &key("example.com")));
-    }
-
-    #[test]
-    fn expired_pause_covers_subdomains() {
-        let trie = trie_from(&[("example.com", now_epoch_ms() - 1)]);
-        assert!(pause_lazily_expired(&trie, &key("sub.example.com")));
-    }
-
-    #[test]
-    fn active_pause_covers_subdomains() {
-        let trie = trie_from(&[("example.com", now_epoch_ms() + 60_000)]);
-        assert!(!pause_lazily_expired(&trie, &key("sub.example.com")));
-    }
-
-    #[test]
-    fn unpaused_domain_is_untouched() {
-        let trie = trie_from(&[("example.com", now_epoch_ms() - 1)]);
-        assert!(!pause_lazily_expired(&trie, &key("other.com")));
-    }
-
-    #[test]
-    fn empty_pause_set_never_blocks() {
-        let trie = trie_from(&[]);
-        assert!(!pause_lazily_expired(&trie, &key("example.com")));
-    }
-
-    #[test]
-    fn invalid_domains_are_skipped_when_building_the_trie() {
-        // A 64-byte label exceeds the DNS label limit and must be dropped,
-        // not panic.
-        let long_label = "a".repeat(64);
-        let map: HashMap<String, i64> = [(format!("{long_label}.com"), now_epoch_ms() - 1)]
-            .into_iter()
-            .collect();
-        let trie = pauses_trie(map);
-        assert!(!pause_lazily_expired(&trie, &key("example.com")));
-    }
-
-    #[test]
-    fn pauses_trie_uses_lowercase_keys() {
-        let map: HashMap<String, i64> = [("EXAMPLE.com".to_string(), now_epoch_ms() - 1)]
-            .into_iter()
-            .collect();
-        let trie = pauses_trie(map);
-        assert!(pause_lazily_expired(&trie, &key("example.com")));
-    }
-
-    fn list(domains: &[&str]) -> Trie<Vec<u8>, ()> {
-        domain_trie(domains.iter().map(|d| d.to_string()).collect())
-    }
-
-    #[test]
-    fn whitelist_overrides_identical_block() {
-        let block = list(&["example.com"]);
-        let allow = list(&["example.com"]);
-        let pauses = trie_from(&[]);
-        assert!(!should_block(&block, &allow, &pauses, &key("example.com")));
-        assert!(!should_block(&block, &allow, &pauses, &key("www.example.com")));
-    }
-
-    #[test]
-    fn whitelisted_parent_overrides_blocked_subdomain() {
-        // Blocklists often list "www.example.com" separately; whitelisting
-        // the bare domain (what DomainInputParser produces) must cover it.
-        let block = list(&["www.example.com", "cdn.example.com"]);
-        let allow = list(&["example.com"]);
-        let pauses = trie_from(&[]);
-        assert!(!should_block(&block, &allow, &pauses, &key("www.example.com")));
-        assert!(!should_block(&block, &allow, &pauses, &key("cdn.example.com")));
-    }
-
-    #[test]
-    fn whitelisted_subdomain_overrides_blocked_parent() {
-        let block = list(&["example.com"]);
-        let allow = list(&["docs.example.com"]);
-        let pauses = trie_from(&[]);
-        assert!(!should_block(&block, &allow, &pauses, &key("docs.example.com")));
-        assert!(should_block(&block, &allow, &pauses, &key("ads.example.com")));
-        assert!(should_block(&block, &allow, &pauses, &key("example.com")));
-    }
-
-    #[test]
-    fn whitelist_overrides_expired_pause() {
-        let block = list(&[]);
-        let allow = list(&["example.com"]);
-        let pauses = trie_from(&[("example.com", now_epoch_ms() - 1)]);
-        assert!(!should_block(&block, &allow, &pauses, &key("example.com")));
-    }
-
-    #[test]
-    fn whitelist_does_not_leak_to_lookalike_domains() {
-        let block = list(&["example.com", "notexample.com"]);
-        let allow = list(&["example.com"]);
-        let pauses = trie_from(&[]);
-        assert!(should_block(&block, &allow, &pauses, &key("notexample.com")));
-    }
-
-    #[test]
-    fn blocking_unaffected_without_whitelist() {
-        let block = list(&["example.com"]);
-        let allow = list(&[]);
-        let pauses = trie_from(&[]);
-        assert!(should_block(&block, &allow, &pauses, &key("sub.example.com")));
-        assert!(!should_block(&block, &allow, &pauses, &key("other.com")));
-    }
 }
 
 /// Tests for the packet policy and for the proxy loop itself, driven over a
@@ -1290,19 +1185,24 @@ mod loop_tests {
         }
     }
 
-    fn tries(block: &[&str]) -> (Trie<Vec<u8>, ()>, Trie<Vec<u8>, ()>, Trie<Vec<u8>, i64>) {
-        (
-            domain_trie(block.iter().map(|d| d.to_string()).collect()),
-            Trie::new(),
-            Trie::new(),
-        )
+    fn blocking(domains: &[&str]) -> Rules {
+        crate::rules::tests::rules(domains, &[], &[])
+    }
+
+    /// Rules as the Android side builds them: through a builder.
+    fn shared_rules(domains: &[&str]) -> Arc<FilterRules> {
+        let builder = BlocklistBuilder::new();
+        builder.add(domains.iter().map(|d| d.to_string()).collect());
+        let rules = FilterRules::new();
+        rules.set_blocklist(builder);
+        rules
     }
 
     #[test]
     fn blocked_query_is_answered_nxdomain() {
-        let (block, allow, pauses) = tries(&["example.com"]);
+        let rules = blocking(&["example.com"]);
         let pkt = udp_packet(&make_query("ads.example.com"), 53);
-        match classify_packet(&pkt, &block, &allow, &pauses) {
+        match classify_packet(&pkt, &rules) {
             PacketAction::Respond(resp) => assert_eq!(rcode_of(&resp), Rcode::NXDOMAIN),
             other => panic!("expected Respond, got {other:?}"),
         }
@@ -1310,10 +1210,10 @@ mod loop_tests {
 
     #[test]
     fn allowed_query_is_forwarded_unchanged() {
-        let (block, allow, pauses) = tries(&["example.com"]);
+        let rules = blocking(&["example.com"]);
         let query = make_query("other.com");
         let pkt = udp_packet(&query, 53);
-        match classify_packet(&pkt, &block, &allow, &pauses) {
+        match classify_packet(&pkt, &rules) {
             PacketAction::Forward(payload) => assert_eq!(payload, query),
             other => panic!("expected Forward, got {other:?}"),
         }
@@ -1321,12 +1221,12 @@ mod loop_tests {
 
     #[test]
     fn non_dns_and_garbage_are_dropped() {
-        let (block, allow, pauses) = tries(&["example.com"]);
+        let rules = blocking(&["example.com"]);
         let not_port_53 = udp_packet(&make_query("example.com"), 5353);
         let not_dns = udp_packet(&[1, 2, 3], 53);
         for pkt in [&not_port_53[..], &not_dns[..], &[0u8; 4][..], &[][..]] {
             assert!(matches!(
-                classify_packet(pkt, &block, &allow, &pauses),
+                classify_packet(pkt, &rules),
                 PacketAction::Drop
             ));
         }
@@ -1334,14 +1234,14 @@ mod loop_tests {
 
     #[test]
     fn tcp_is_answered_with_a_rst() {
-        let (block, allow, pauses) = tries(&[]);
+        let rules = blocking(&[]);
         let mut pkt = Vec::new();
         etherparse::PacketBuilder::ipv4([10, 0, 0, 2], [10, 0, 0, 1], 64)
             .tcp(40000, 53, 1, 1024)
             .syn()
             .write(&mut pkt, &[])
             .unwrap();
-        match classify_packet(&pkt, &block, &allow, &pauses) {
+        match classify_packet(&pkt, &rules) {
             PacketAction::Respond(resp) => {
                 let sliced = SlicedPacket::from_ip(&resp).unwrap();
                 match sliced.transport.as_ref() {
@@ -1360,8 +1260,14 @@ mod loop_tests {
         device
             .set_read_timeout(Some(Duration::from_secs(5)))
             .unwrap();
-        let proxy = DnsProxy::new(tun.as_raw_fd(), None, None, String::new(), Vec::new());
-        proxy.update_blocklist(vec!["example.com".to_string()]);
+        let proxy = DnsProxy::new(
+            tun.as_raw_fd(),
+            None,
+            None,
+            String::new(),
+            Vec::new(),
+            shared_rules(&["example.com"]),
+        );
         (device, tun, proxy)
     }
 
@@ -1418,8 +1324,14 @@ mod loop_tests {
         }
         assert!(first.stop_and_wait(WAIT_MS));
 
-        let second = DnsProxy::new(tun.as_raw_fd(), None, None, String::new(), Vec::new());
-        second.update_blocklist(vec!["blocked.test".to_string()]);
+        let second = DnsProxy::new(
+            tun.as_raw_fd(),
+            None,
+            None,
+            String::new(),
+            Vec::new(),
+            shared_rules(&["blocked.test"]),
+        );
         second.start();
         assert_eq!(ask(&device, "blocked.test"), Rcode::NXDOMAIN);
         assert!(second.stop_and_wait(WAIT_MS));

@@ -102,9 +102,6 @@ class MyVpnService : VpnService() {
 
     private var dnsProxy: DnsProxy? = null
 
-    @Volatile
-    private var isBlockingEnabled = true
-
     private val blocklistRepository get() = ServiceLocator.blocklistRepository
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
@@ -130,7 +127,7 @@ class MyVpnService : VpnService() {
             }
             ACTION_SET_BLOCKING -> {
                 val enabled = intent.getBooleanExtra(EXTRA_BLOCKING_ENABLED, true)
-                isBlockingEnabled = enabled
+                dnsFilter.setBlockingEnabled(enabled)
                 Log.i(TAG, "Blocking ${if (enabled) "enabled" else "disabled"}")
                 if (isRunning) debounceRebuild() else stopIdleService()
             }
@@ -212,10 +209,11 @@ class MyVpnService : VpnService() {
                 connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as? ConnectivityManager
                 activePhysicalNetwork = connectivityManager?.activeNetwork
 
-                // Read before the first push to the proxy, which only sends
-                // the blocklist when this is true.
-                isBlockingEnabled = userPreferences.isBlockingEnabledFlow.first()
-                Log.i(TAG, "Blocking enabled: $isBlockingEnabled")
+                // Set before the proxy starts, so it never blocks while the
+                // user has blocking switched off.
+                val blockingEnabled = userPreferences.isBlockingEnabledFlow.first()
+                dnsFilter.setBlockingEnabled(blockingEnabled)
+                Log.i(TAG, "Blocking enabled: $blockingEnabled")
 
                 // Hold the rebuild lock for the whole initial setup so a
                 // flush or network change arriving now can't interleave.
@@ -235,7 +233,7 @@ class MyVpnService : VpnService() {
                     }
 
                     // Restore persisted pauses into the live filter before the
-                    // initial push. Without this, a service start without the UI
+                    // proxy starts. Without this, a service start without the UI
                     // process (boot, START_STICKY restart) would forget active
                     // pauses and block mid-pause domains.
                     val persistedPauses = userPreferences.getPausedDomains()
@@ -322,10 +320,7 @@ class MyVpnService : VpnService() {
                 vpnInterface = null
             }
 
-            // The proxy callbacks capture this service; drop them so the
-            // singleton filter doesn't keep a destroyed service alive.
-            dnsFilter.rustProxyCallback = null
-            dnsFilter.rustAllowlistCallback = null
+            // Frees the blocklist; the next start reloads it from the cache.
             dnsFilter.clear()
         }
     }
@@ -341,11 +336,10 @@ class MyVpnService : VpnService() {
      * fd use this so the old task can't interfere with the next proxy. It
      * must not be used on the main thread.
      *
-     * The proxy is published and unpublished under the [dnsFilter] monitor.
-     * DnsFilter invokes its push callbacks while holding that same monitor,
-     * so once this has cleared [dnsProxy] no callback can reach the proxy
-     * and it can be stopped and closed outside the lock, without stalling
-     * rule updates while waiting.
+     * The proxy is published and unpublished under the [dnsFilter] monitor,
+     * then stopped and closed outside the lock, so waiting for it to exit
+     * doesn't stall rule updates. The rules live in [DnsFilter.rules], not
+     * in the proxy, so nothing is lost with it.
      */
     private fun releaseProxy(awaitExit: Boolean = false): Boolean {
         val proxy = synchronized(dnsFilter) {
@@ -363,8 +357,8 @@ class MyVpnService : VpnService() {
     }
 
     /**
-     * Creates a [DnsProxy] on [tun], pushes the current filter state to it
-     * and starts it. Suspends until the proxy is running (or discarded), so
+     * Creates a [DnsProxy] on [tun], sharing the filter's rules, and starts
+     * it. Suspends until the proxy is running (or discarded), so
      * callers holding [rebuildMutex] cover the whole startup.
      *
      * If the VPN was stopped or the TUN replaced while this was resolving the
@@ -406,7 +400,14 @@ class MyVpnService : VpnService() {
         // Pass resolved IPs, but keep SNI hostname for the QUIC handshake.
         // Backups (Cloudflare, Google) are literal IPs — no resolution needed.
         val proxy = try {
-            DnsProxy(fd, upstreamV4, upstreamV6, upstreamConfig.sniHostname, DOH3_BACKUPS)
+            DnsProxy(
+                fd,
+                upstreamV4,
+                upstreamV6,
+                upstreamConfig.sniHostname,
+                DOH3_BACKUPS,
+                dnsFilter.rules
+            )
         } catch (e: Exception) {
             // Rust panics (e.g. a socket that can't be bound) surface here.
             Log.e(TAG, "Failed to create DNS proxy", e)
@@ -428,23 +429,6 @@ class MyVpnService : VpnService() {
                 return
             }
             dnsProxy = proxy
-
-            dnsFilter.rustProxyCallback = { domains, pauses ->
-                if (isBlockingEnabled) {
-                    dnsProxy?.updateBlocklist(domains)
-                    dnsProxy?.updatePauses(pauses)
-                }
-            }
-            dnsFilter.rustAllowlistCallback = { domains ->
-                dnsProxy?.updateAllowlist(domains)
-            }
-
-            if (isBlockingEnabled) {
-                proxy.updateBlocklist(dnsFilter.getBlocklist())
-                proxy.updatePauses(dnsFilter.getPausedDomains())
-            }
-            proxy.updateAllowlist(dnsFilter.getAllowlist())
-
             proxy.start()
         }
     }
