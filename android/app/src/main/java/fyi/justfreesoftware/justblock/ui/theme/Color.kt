@@ -23,6 +23,7 @@ val DarkSurface = Color(0xFF1A1B1F)
 val DarkOnSurface = Color(0xFFE4E2E6)
 val DarkSurfaceVariant = Color(0xFF46464A)
 val DarkOnSurfaceVariant = Color(0xFFC7C6CA)
+val DarkSurfaceContainer = Color(0xFF202125) // Bottom navigation bar
 
 val Primary40 = Color(0xFF8F4A00) // Burnt orange (tone-40, accessible on white)
 val OnPrimary40 = Color.White
@@ -45,3 +46,4 @@ val LightSurface = Color(0xFFFDF8F5)
 val LightOnSurface = Color(0xFF1F1B16)
 val LightSurfaceVariant = Color(0xFFEFE8E2) // Warm gray for cards
 val LightOnSurfaceVariant = Color(0xFF4D4539)
+val LightSurfaceContainer = Color(0xFFF5EEE8) // Bottom navigation bar

@@ -4,10 +4,13 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Column
@@ -46,6 +49,7 @@ import fyi.justfreesoftware.justblock.ui.VpnViewModel
 import fyi.justfreesoftware.justblock.ui.WhitelistScreen
 import fyi.justfreesoftware.justblock.ui.theme.JustBlockTheme
 import fyi.justfreesoftware.justblock.ui.theme.ThemeMode
+import fyi.justfreesoftware.justblock.ui.theme.isDark
 
 class MainActivity : ComponentActivity() {
 
@@ -91,6 +95,18 @@ class MainActivity : ComponentActivity() {
             var selectedTab by remember { mutableStateOf(0) }
             val themeMode by viewModel.themeMode.collectAsState()
             val hasSeenWelcome by viewModel.hasSeenWelcome.collectAsState()
+
+            // The system bars follow the app's theme, not the system's, so the
+            // navigation bar never shows a light scrim under a dark app.
+            val darkTheme = themeMode.isDark()
+            LaunchedEffect(darkTheme) {
+                val style = if (darkTheme) {
+                    SystemBarStyle.dark(Color.TRANSPARENT)
+                } else {
+                    SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+                }
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+            }
 
             var showWelcomeDialog by remember { mutableStateOf(false) }
             var permissionsRequested by remember { mutableStateOf(false) }
